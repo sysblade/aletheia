@@ -77,7 +77,7 @@ export function LiveStreamSection() {
         id="live-stream-body"
         class="p-4"
         hx-get="/partials/live-stream-table"
-        hx-trigger="toggle[open] from:closest details"
+        hx-trigger="toggle[event.target.open] from:closest details"
         hx-swap="innerHTML"
       />
     </details>
