@@ -1,6 +1,8 @@
 import { sql } from "kysely";
 import type { Kysely } from "kysely";
 import { SearchError, type CertificateRepository } from "../repository.ts";
+import { parseSearchQuery } from "../search-query.ts";
+import type { SearchTerm } from "../search-query.ts";
 import type { Certificate, ExportBatch, NewCertificate, SearchOpts, SearchResult, Stats } from "../../types/certificate.ts";
 import type { Database, CertificateRow } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
@@ -68,13 +70,14 @@ export class SqliteRepository implements CertificateRepository {
     try {
       for (let i = 0; i < rows.length; i += INSERT_CHUNK_SIZE) {
         const chunk = rows.slice(i, i + INSERT_CHUNK_SIZE);
-        const result = await this.db
+        await this.db
           .insertInto("certificates")
           .values(chunk)
           .onConflict((oc) => oc.column("fingerprint").doNothing())
           .execute();
 
-        totalInserted += result.reduce((sum, r) => sum + Number(r.numInsertedOrUpdatedRows ?? 0), 0);
+        const changesResult = await sql<{ n: number }>`SELECT changes() as n`.execute(this.db);
+        totalInserted += changesResult.rows[0]?.n ?? 0;
       }
       return totalInserted;
     } catch (err) {
@@ -86,8 +89,41 @@ export class SqliteRepository implements CertificateRepository {
   async search(query: string, opts: SearchOpts): Promise<SearchResult> {
     const { page, limit } = opts;
     const offset = (page - 1) * limit;
-    const sanitized = query.replace(/\0/g, "").replace(/"/g, '""');
-    const matchExpr = `"${sanitized}"`;
+    const parsed = parseSearchQuery(query);
+
+    if (parsed.groups.length === 0) {
+      throw new SearchError("Query must contain at least one search term.");
+    }
+
+    const FTS_COL: Record<string, string> = {
+      domain: "domains",
+      issuer: "issuer_org",
+      cn: "subject_cn",
+    };
+
+    function termPhrase(t: SearchTerm): string {
+      const safe = t.text.replace(/\0/g, "").replace(/"/g, '""');
+      const col = t.column ? `${FTS_COL[t.column]}:` : "";
+      return `${col}"${safe}"`;
+    }
+
+    function buildGroupExpr(terms: SearchTerm[]): string {
+      const pos = terms.filter((t) => !t.negate);
+      const neg = terms.filter((t) => t.negate);
+
+      if (pos.length === 0) {
+        throw new SearchError("Each OR group must contain at least one positive search term.");
+      }
+
+      const posExpr = pos.length === 1 ? termPhrase(pos[0]!) : `(${pos.map(termPhrase).join(" AND ")})`;
+      return neg.length === 0
+        ? posExpr
+        : `${posExpr} ${neg.map((t) => `NOT ${termPhrase(t)}`).join(" ")}`;
+    }
+
+    const groupExprs = parsed.groups.map(buildGroupExpr);
+    const matchExpr =
+      groupExprs.length === 1 ? groupExprs[0]! : groupExprs.map((e) => `(${e})`).join(" OR ");
 
     try {
       const countResult = await sql<{ cnt: number }>`

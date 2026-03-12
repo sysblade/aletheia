@@ -1,6 +1,8 @@
-import type { Db, Collection } from "mongodb";
+import type { Db, Collection, Filter } from "mongodb";
 import { MongoBulkWriteError } from "mongodb";
 import { SearchError, type CertificateRepository } from "../repository.ts";
+import { parseSearchQuery } from "../search-query.ts";
+import type { SearchTerm } from "../search-query.ts";
 import type { Certificate, ExportBatch, NewCertificate, SearchOpts, SearchResult, Stats } from "../../types/certificate.ts";
 import type { CertificateDocument, CounterDocument } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
@@ -91,67 +93,61 @@ export class MongoRepository implements CertificateRepository {
   async search(query: string, opts: SearchOpts): Promise<SearchResult> {
     const { page, limit } = opts;
     const offset = (page - 1) * limit;
+    const parsed = parseSearchQuery(query);
+
+    if (parsed.groups.length === 0) {
+      throw new SearchError("Query must contain at least one search term.");
+    }
+
+    function termFilter(term: SearchTerm): object {
+      const pattern = escapeRegex(term.text);
+      const re = { $regex: pattern, $options: "i" };
+
+      if (term.negate) {
+        switch (term.column) {
+          case "domain": return { domains: { $not: re } };
+          case "issuer": return { issuerOrg: { $not: re } };
+          case "cn": return { subjectCn: { $not: re } };
+          default: return { $nor: [{ domains: re }, { issuerOrg: re }, { subjectCn: re }] };
+        }
+      }
+
+      switch (term.column) {
+        case "domain": return { domains: { $elemMatch: re } };
+        case "issuer": return { issuerOrg: re };
+        case "cn": return { subjectCn: re };
+        default: return { $or: [{ domains: { $elemMatch: re } }, { issuerOrg: re }, { subjectCn: re }] };
+      }
+    }
+
+    function groupFilter(terms: SearchTerm[]): object {
+      const conditions = terms.map(termFilter);
+      return conditions.length === 1 ? conditions[0]! : { $and: conditions };
+    }
 
     try {
-      const textResults = await this.searchWithText(query, page, offset, limit);
-      if (textResults.total > 0) return textResults;
+      const groupFilters = parsed.groups.map(groupFilter);
+      const filter: Filter<CertificateDocument> =
+        groupFilters.length === 1
+          ? (groupFilters[0] as Filter<CertificateDocument>)
+          : ({ $or: groupFilters } as Filter<CertificateDocument>);
 
-      return await this.searchWithRegex(query, page, offset, limit);
+      const [total, docs] = await Promise.all([
+        this.certs.countDocuments(filter),
+        this.certs.find(filter).sort({ seenAt: -1 }).skip(offset).limit(limit).toArray(),
+      ]);
+
+      return {
+        certificates: docs.map(docToCertificate),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
     } catch (err) {
       log.error("Search query failed with {error} for query {query}", { error: String(err), query });
       throw new SearchError("Search failed. Try a different query.");
     }
-  }
-
-  private async searchWithText(query: string, page: number, offset: number, limit: number): Promise<SearchResult> {
-    const filter = { $text: { $search: query } };
-
-    const [total, docs] = await Promise.all([
-      this.certs.countDocuments(filter),
-      this.certs
-        .find(filter)
-        .sort({ seenAt: -1 })
-        .skip(offset)
-        .limit(limit)
-        .toArray(),
-    ]);
-
-    return {
-      certificates: docs.map(docToCertificate),
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
-  }
-
-  private async searchWithRegex(query: string, page: number, offset: number, limit: number): Promise<SearchResult> {
-    const pattern = escapeRegex(query);
-    const filter = {
-      $or: [
-        { domains: { $elemMatch: { $regex: pattern, $options: "i" } } },
-        { issuerOrg: { $regex: pattern, $options: "i" } },
-        { subjectCn: { $regex: pattern, $options: "i" } },
-      ],
-    };
-
-    const [total, docs] = await Promise.all([
-      this.certs.countDocuments(filter),
-      this.certs
-        .find(filter)
-        .sort({ seenAt: -1 })
-        .skip(offset)
-        .limit(limit)
-        .toArray(),
-    ]);
-
-    return {
-      certificates: docs.map(docToCertificate),
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
   }
 
   async getById(id: number): Promise<Certificate | null> {

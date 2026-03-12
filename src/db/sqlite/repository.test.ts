@@ -136,6 +136,73 @@ describe("SqliteRepository", () => {
       const result = await repo.search('sanitize\0"test', { page: 1, limit: 50 });
       expect(result).toBeDefined();
     });
+
+    test("domain: prefix scopes search to domains only", async () => {
+      const certWithMatchingDomain = makeCert({ domains: ["scopetest-domain.example.com"], issuerOrg: "Other CA" });
+      const certWithMatchingIssuer = makeCert({ domains: ["unrelated.example.com"], issuerOrg: "scopetest-issuer CA" });
+      await repo.insertBatch([certWithMatchingDomain, certWithMatchingIssuer]);
+      const result = await repo.search("domain:scopetest-domain", { page: 1, limit: 50 });
+      expect(result.total).toBe(1);
+      expect(result.certificates[0]!.fingerprint).toBe(certWithMatchingDomain.fingerprint);
+    });
+
+    test("issuer: prefix scopes search to issuer only", async () => {
+      const certA = makeCert({ domains: ["issuerscope.example.com"], issuerOrg: "TargetIssuerOrg" });
+      const certB = makeCert({ domains: ["TargetIssuerOrg.example.com"], issuerOrg: "Other CA" });
+      await repo.insertBatch([certA, certB]);
+      const result = await repo.search("issuer:TargetIssuerOrg", { page: 1, limit: 50 });
+      expect(result.total).toBe(1);
+      expect(result.certificates[0]!.fingerprint).toBe(certA.fingerprint);
+    });
+
+    test("multi-term AND finds cert containing all terms", async () => {
+      const cert = makeCert({ domains: ["multiterm-alpha-beta.example.com"] });
+      await repo.insertBatch([cert]);
+      const result = await repo.search("multiterm alpha", { page: 1, limit: 50 });
+      expect(result.total).toBe(1);
+    });
+
+    test("multi-term AND excludes cert missing any term", async () => {
+      const certA = makeCert({ domains: ["onlyfoo.example.com"] });
+      const certB = makeCert({ domains: ["onlybar.example.com"] });
+      await repo.insertBatch([certA, certB]);
+      const result = await repo.search("onlyfoo onlybar", { page: 1, limit: 50 });
+      expect(result.total).toBe(0);
+    });
+
+    test("throws SearchError for empty terms after prefix", async () => {
+      await expect(repo.search("domain:", { page: 1, limit: 50 })).rejects.toThrow("at least one search term");
+    });
+
+    test("OR finds certs matching either group", async () => {
+      const certA = makeCert({ domains: ["orleft-unique.example.com"] });
+      const certB = makeCert({ domains: ["orright-unique.example.com"] });
+      const certC = makeCert({ domains: ["unrelated-zzzz.example.com"] });
+      await repo.insertBatch([certA, certB, certC]);
+      const result = await repo.search("orleft-unique OR orright-unique", { page: 1, limit: 50 });
+      expect(result.total).toBe(2);
+    });
+
+    test("OR with column prefix on each side", async () => {
+      const certA = makeCert({ domains: ["orcolA.example.com"], issuerOrg: "Other CA" });
+      const certB = makeCert({ domains: ["orcolB.example.com"], issuerOrg: "Other CA" });
+      await repo.insertBatch([certA, certB]);
+      const result = await repo.search("domain:orcolA OR domain:orcolB", { page: 1, limit: 50 });
+      expect(result.total).toBe(2);
+    });
+
+    test("-term excludes matching certs", async () => {
+      const certA = makeCert({ domains: ["excl-target.example.com"] });
+      const certB = makeCert({ domains: ["excl-other.example.com"] });
+      await repo.insertBatch([certA, certB]);
+      const result = await repo.search("excl -target", { page: 1, limit: 50 });
+      expect(result.total).toBe(1);
+      expect(result.certificates[0]!.fingerprint).toBe(certB.fingerprint);
+    });
+
+    test("throws SearchError when group has only negated terms", async () => {
+      await expect(repo.search("-onlyneg", { page: 1, limit: 50 })).rejects.toThrow();
+    });
   });
 
   describe("getStats", () => {

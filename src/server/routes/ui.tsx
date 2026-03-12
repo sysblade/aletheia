@@ -2,10 +2,9 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { AppEnv } from "../app.ts";
 import { HomePage, StatsCards } from "../views/home.tsx";
-import { SearchPage } from "../views/search.tsx";
 import { ResultsTable } from "../views/components/results-table.tsx";
 import { CertDetail } from "../views/components/cert-detail.tsx";
-import { LiveStreamRows } from "../views/components/live-stream.tsx";
+import { LiveStreamRows, LiveStreamTable } from "../views/components/live-stream.tsx";
 import { Layout } from "../views/layout.tsx";
 
 const LIVE_STREAM_LIMIT = 25;
@@ -13,11 +12,10 @@ const LIVE_STREAM_LIMIT = 25;
 export const uiRoutes = new Hono<AppEnv>();
 
 uiRoutes.get("/", async (c) => {
-  const repo = c.get("repository");
   const metrics = c.get("metrics");
   const filter = c.get("filter");
   const getStats = c.get("getStats");
-  const [stats, recentCerts] = await Promise.all([getStats(), repo.getRecent(LIVE_STREAM_LIMIT)]);
+  const stats = await getStats();
   const m = metrics.snapshot();
 
   return c.html(
@@ -26,15 +24,11 @@ uiRoutes.get("/", async (c) => {
       insertRate={metrics.insertRate()}
       uptimeSeconds={Math.floor((Date.now() - m.startedAt) / 1000)}
       filterMode={filter.mode}
-      recentCerts={recentCerts}
     />,
   );
 });
 
-uiRoutes.get("/search", async (c) => {
-  const q = c.req.query("q")?.trim();
-  return c.html(<SearchPage query={q} />);
-});
+uiRoutes.get("/search", (c) => c.redirect("/"));
 
 uiRoutes.get("/search/results", async (c) => {
   const repo = c.get("repository");
@@ -93,6 +87,12 @@ uiRoutes.get("/cert/:id", async (c) => {
       <CertDetail cert={cert} />
     </Layout>,
   );
+});
+
+uiRoutes.get("/partials/live-stream-table", async (c) => {
+  const repo = c.get("repository");
+  const certs = await repo.getRecent(LIVE_STREAM_LIMIT);
+  return c.html(<LiveStreamTable certificates={certs} />);
 });
 
 uiRoutes.get("/partials/live-stream", async (c) => {

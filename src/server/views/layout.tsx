@@ -26,7 +26,6 @@ export function Layout({ title, children }: { title?: string; children: Child })
             </a>
             <div class="flex items-center space-x-4 text-sm text-gray-400">
               <a href="/" class="hover:text-gray-200">Home</a>
-              <a href="/search" class="hover:text-gray-200">Search</a>
               <a href="/api/stats" class="hover:text-gray-200">API</a>
             </div>
           </div>

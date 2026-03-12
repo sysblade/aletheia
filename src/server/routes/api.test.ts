@@ -85,6 +85,28 @@ describe("API routes", () => {
       const body = await json(res);
       expect(body.limit).toBe(100);
     });
+
+    test("domain: column prefix scopes to domains", async () => {
+      await repo.insertBatch([
+        makeCert({ domains: ["apiscoped-domain.example.com"], issuerOrg: "Other CA" }),
+        makeCert({ domains: ["unrelated.com"], issuerOrg: "apiscoped-issuer CA" }),
+      ]);
+      const res = await app.request("/api/search?q=domain%3Aapiscoped-domain");
+      expect(res.status).toBe(200);
+      const body = await json(res);
+      expect(body.total).toBe(1);
+    });
+
+    test("multi-term AND via API", async () => {
+      await repo.insertBatch([
+        makeCert({ domains: ["apimulti-foo-bar.example.com"] }),
+        makeCert({ domains: ["apimulti-foo-only.example.com"] }),
+      ]);
+      const res = await app.request("/api/search?q=apimulti-foo+bar");
+      expect(res.status).toBe(200);
+      const body = await json(res);
+      expect(body.total).toBe(1);
+    });
   });
 
   describe("GET /api/cert/:id", () => {

@@ -1,8 +1,9 @@
 import { Layout } from "./layout.tsx";
 import { SearchForm } from "./components/search-form.tsx";
+import { SearchGuide } from "./search.tsx";
 import { StatsCard } from "./components/stats-card.tsx";
 import { LiveStreamSection } from "./components/live-stream.tsx";
-import type { Certificate, Stats } from "../../types/certificate.ts";
+import type { Stats } from "../../types/certificate.ts";
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -17,13 +18,11 @@ export function HomePage({
   insertRate,
   uptimeSeconds,
   filterMode,
-  recentCerts,
 }: {
   stats: Stats;
   insertRate: number;
   uptimeSeconds: number;
   filterMode: string;
-  recentCerts: Certificate[];
 }) {
   return (
     <Layout>
@@ -34,6 +33,7 @@ export function HomePage({
 
       <div class="mb-8">
         <SearchForm />
+        <SearchGuide />
       </div>
 
       <div id="search-results"></div>
@@ -47,7 +47,7 @@ export function HomePage({
         <StatsCards stats={stats} insertRate={insertRate} uptimeSeconds={uptimeSeconds} filterMode={filterMode} />
       </div>
 
-      <LiveStreamSection certificates={recentCerts} />
+      <LiveStreamSection />
     </Layout>
   );
 }

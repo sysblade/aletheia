@@ -39,34 +39,47 @@ export function LiveStreamRows({ certificates }: { certificates: Certificate[] }
   );
 }
 
-export function LiveStreamSection({ certificates }: { certificates: Certificate[] }) {
+export function LiveStreamTable({ certificates }: { certificates: Certificate[] }) {
   return (
-    <div class="mt-8">
-      <div class="flex items-center gap-2 mb-4">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-gray-400 border-b border-gray-700">
+            <th class="pb-2 pr-4">Domain</th>
+            <th class="pb-2 pr-4">Issuer</th>
+            <th class="pb-2">Seen</th>
+          </tr>
+        </thead>
+        <tbody
+          hx-ext="sse"
+          sse-connect="/events/live-stream"
+          sse-swap="certificates"
+        >
+          <LiveStreamRows certificates={certificates} />
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function LiveStreamSection() {
+  return (
+    <details class="mt-8 border border-gray-700 rounded-lg overflow-hidden">
+      <summary class="cursor-pointer select-none px-4 py-3 bg-gray-800 hover:bg-gray-750 flex items-center gap-2">
         <span class="relative flex h-2.5 w-2.5">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
           <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
         </span>
-        <h2 class="text-lg font-semibold text-gray-200">Live Stream</h2>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-gray-400 border-b border-gray-700">
-              <th class="pb-2 pr-4">Domain</th>
-              <th class="pb-2 pr-4">Issuer</th>
-              <th class="pb-2">Seen</th>
-            </tr>
-          </thead>
-          <tbody
-            hx-ext="sse"
-            sse-connect="/events/live-stream"
-            sse-swap="certificates"
-          >
-            <LiveStreamRows certificates={certificates} />
-          </tbody>
-        </table>
-      </div>
-    </div>
+        <span class="text-lg font-semibold text-gray-200">Live Stream</span>
+        <span class="text-gray-600 text-xs font-normal ml-1">(click to expand)</span>
+      </summary>
+      <div
+        id="live-stream-body"
+        class="p-4"
+        hx-get="/partials/live-stream-table"
+        hx-trigger="toggle[open] from:closest details"
+        hx-swap="innerHTML"
+      />
+    </details>
   );
 }
