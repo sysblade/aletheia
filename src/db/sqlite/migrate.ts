@@ -1,11 +1,11 @@
 import { type Kysely, type Migration, type MigrationProvider, Migrator } from "kysely";
 import type { Database } from "./schema.ts";
-import { createLogger } from "../../utils/logger.ts";
+import { getLogger } from "../../utils/logger.ts";
 
 import * as m001 from "./migrations/001_create_certificates.ts";
 import * as m002 from "./migrations/002_create_fts_index.ts";
 
-const log = createLogger("migrate");
+const log = getLogger(["ctlog", "migrate"]);
 
 class StaticMigrationProvider implements MigrationProvider {
   async getMigrations(): Promise<Record<string, Migration>> {
@@ -26,14 +26,14 @@ export async function runMigrations(db: Kysely<Database>): Promise<void> {
 
   results?.forEach((result) => {
     if (result.status === "Success") {
-      log.info(`Migration "${result.migrationName}" executed successfully`);
+      log.info("Migration {name} executed successfully", { name: result.migrationName });
     } else if (result.status === "Error") {
-      log.error(`Migration "${result.migrationName}" failed`);
+      log.error("Migration {name} failed", { name: result.migrationName });
     }
   });
 
   if (error) {
-    log.error("Migration failed", { error: String(error) });
+    log.error("Migration failed with {error}", { error: String(error) });
     throw error;
   }
 }

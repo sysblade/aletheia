@@ -3,9 +3,9 @@ import type { Kysely } from "kysely";
 import type { CertificateRepository } from "../repository.ts";
 import type { Certificate, NewCertificate, SearchOpts, SearchResult, Stats } from "../../types/certificate.ts";
 import type { Database, CertificateRow } from "./schema.ts";
-import { createLogger } from "../../utils/logger.ts";
+import { getLogger } from "../../utils/logger.ts";
 
-const log = createLogger("sqlite-repo");
+const log = getLogger(["ctlog", "sqlite", "repository"]);
 
 const INSERT_CHUNK_SIZE = 50;
 
@@ -14,7 +14,7 @@ function parseDomains(raw: string): string[] {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
-    log.warn("Failed to parse domains JSON", { raw: raw.slice(0, 100) });
+    log.warn("Failed to parse domains JSON, raw starts with {preview}", { preview: raw.slice(0, 100) });
     return [];
   }
 }
@@ -78,7 +78,7 @@ export class SqliteRepository implements CertificateRepository {
       }
       return totalInserted;
     } catch (err) {
-      log.error("Batch insert failed", { error: String(err), batchSize: certs.length });
+      log.error("Batch insert failed with {error}, batch had {batchSize} certs", { error: String(err), batchSize: certs.length });
       throw err;
     }
   }
@@ -116,7 +116,7 @@ export class SqliteRepository implements CertificateRepository {
         totalPages: Math.ceil(total / limit),
       };
     } catch (err) {
-      log.error("Search query failed", { error: String(err), query });
+      log.error("Search query failed with {error} for query {query}", { error: String(err), query });
       throw new SearchError("Search failed. Try a different query.");
     }
   }
@@ -161,7 +161,7 @@ export class SqliteRepository implements CertificateRepository {
     const deleted = result.reduce((sum, r) => sum + Number(r.numDeletedRows ?? 0), 0);
 
     if (deleted > 0) {
-      log.info("Cleanup completed", { deleted, olderThanDays });
+      log.info("Cleanup completed, deleted {deleted} rows older than {olderThanDays} days", { deleted, olderThanDays });
     }
 
     return deleted;

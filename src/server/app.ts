@@ -4,9 +4,9 @@ import type { CertificateRepository } from "../db/repository.ts";
 import { SearchError } from "../db/sqlite/repository.ts";
 import { apiRoutes } from "./routes/api.ts";
 import { uiRoutes } from "./routes/ui.tsx";
-import { createLogger } from "../utils/logger.ts";
+import { getLogger } from "../utils/logger.ts";
 
-const log = createLogger("server");
+const log = getLogger(["ctlog", "server"]);
 
 export type AppEnv = {
   Variables: {
@@ -28,7 +28,7 @@ export function createApp(repository: CertificateRepository) {
     if (err instanceof SearchError) {
       return c.json({ error: err.message }, 400);
     }
-    log.error("Unhandled error", { error: String(err), path: c.req.path });
+    log.error("Unhandled error on {path}: {error}", { error: String(err), path: c.req.path });
     return c.json({ error: "Internal server error" }, 500);
   });
 

@@ -2,12 +2,12 @@ import { Kysely } from "kysely";
 import { BunSqliteDialect } from "kysely-bun-sqlite";
 import { Database as BunDatabase } from "bun:sqlite";
 import type { Database } from "./schema.ts";
-import { createLogger } from "../../utils/logger.ts";
+import { getLogger } from "../../utils/logger.ts";
 
-const log = createLogger("sqlite");
+const log = getLogger(["ctlog", "sqlite"]);
 
 export function createDatabase(path: string): Kysely<Database> {
-  log.info("Opening database", { path });
+  log.info("Opening database at {path}", { path });
 
   const sqlite = new BunDatabase(path, { create: true });
 

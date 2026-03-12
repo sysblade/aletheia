@@ -1,7 +1,7 @@
 import type { NewCertificate } from "../types/certificate.ts";
-import { createLogger } from "../utils/logger.ts";
+import { getLogger } from "../utils/logger.ts";
 
-const log = createLogger("buffer");
+const log = getLogger(["ctlog", "buffer"]);
 
 export class BatchBuffer {
   private items: NewCertificate[] = [];
@@ -44,7 +44,7 @@ export class BatchBuffer {
     try {
       await this.flushCallback(batch);
     } catch (err) {
-      log.error("Flush failed, re-queuing batch", { error: String(err), batchSize: batch.length });
+      log.error("Flush failed, re-queuing {batchSize} items: {error}", { error: String(err), batchSize: batch.length });
       this.items = batch.concat(this.items);
     } finally {
       this.flushing = false;

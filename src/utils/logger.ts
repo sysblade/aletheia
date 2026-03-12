@@ -1,41 +1,35 @@
-type LogLevel = "debug" | "info" | "warn" | "error";
+import { configure, getConsoleSink, getLogger, parseLogLevel } from "@logtape/logtape";
+import type { LogLevel } from "@logtape/logtape";
 
-const LEVEL_ORDER: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
+const VALID_LEVELS: ReadonlySet<string> = new Set(["trace", "debug", "info", "warning", "error", "fatal"]);
 
-const rawLevel = process.env.LOG_LEVEL;
-const minLevel: LogLevel = rawLevel && rawLevel in LEVEL_ORDER ? (rawLevel as LogLevel) : "info";
-
-function shouldLog(level: LogLevel): boolean {
-  return LEVEL_ORDER[level] >= LEVEL_ORDER[minLevel];
+function resolveLogLevel(): LogLevel {
+  const raw = process.env.LOG_LEVEL?.toLowerCase();
+  if (!raw) return "info";
+  if (raw === "warn") return "warning";
+  if (VALID_LEVELS.has(raw)) return parseLogLevel(raw);
+  return "info";
 }
 
-function formatLog(level: LogLevel, component: string, message: string, data?: Record<string, unknown>): string {
-  const ts = new Date().toISOString();
-  const base = `${ts} [${level.toUpperCase().padEnd(5)}] [${component}] ${message}`;
-  if (data && Object.keys(data).length > 0) {
-    return `${base} ${JSON.stringify(data)}`;
-  }
-  return base;
+export async function configureLogging(): Promise<void> {
+  const level = resolveLogLevel();
+  await configure({
+    sinks: {
+      console: getConsoleSink(),
+    },
+    loggers: [
+      {
+        category: "ctlog",
+        lowestLevel: level,
+        sinks: ["console"],
+      },
+      {
+        category: "logtape",
+        lowestLevel: "error",
+        sinks: ["console"],
+      },
+    ],
+  });
 }
 
-export function createLogger(component: string) {
-  return {
-    debug(message: string, data?: Record<string, unknown>) {
-      if (shouldLog("debug")) console.debug(formatLog("debug", component, message, data));
-    },
-    info(message: string, data?: Record<string, unknown>) {
-      if (shouldLog("info")) console.info(formatLog("info", component, message, data));
-    },
-    warn(message: string, data?: Record<string, unknown>) {
-      if (shouldLog("warn")) console.warn(formatLog("warn", component, message, data));
-    },
-    error(message: string, data?: Record<string, unknown>) {
-      if (shouldLog("error")) console.error(formatLog("error", component, message, data));
-    },
-  };
-}
+export { getLogger };

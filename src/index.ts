@@ -1,3 +1,4 @@
+import { configureLogging, getLogger } from "./utils/logger.ts";
 import { config } from "./config.ts";
 import { createDatabase } from "./db/sqlite/connection.ts";
 import { runMigrations } from "./db/sqlite/migrate.ts";
@@ -7,13 +8,14 @@ import { CertFilter } from "./ingestor/filter.ts";
 import { BatchBuffer } from "./ingestor/buffer.ts";
 import { BatchWriter } from "./ingestor/writer.ts";
 import { createApp } from "./server/app.ts";
-import { createLogger } from "./utils/logger.ts";
 import { metrics } from "./utils/metrics.ts";
 
-const log = createLogger("main");
-
 async function main() {
-  log.info("Starting CT Log Monitor", {
+  await configureLogging();
+
+  const log = getLogger(["ctlog", "main"]);
+
+  log.info("Starting CT Log Monitor on port {port}, db at {dbPath}, retention {retentionDays} days", {
     port: config.server.port,
     dbPath: config.db.path,
     retentionDays: config.db.retentionDays,
@@ -25,7 +27,7 @@ async function main() {
   const repository = new SqliteRepository(db);
 
   const filter = new CertFilter(config.filters.domains, config.filters.issuers);
-  log.info("Filter mode", { mode: filter.describe() });
+  log.info("Filter mode: {mode}", { mode: filter.describe() });
 
   const writer = new BatchWriter(repository);
 
@@ -51,10 +53,10 @@ async function main() {
     try {
       const deleted = await repository.cleanup(config.db.retentionDays);
       if (deleted > 0) {
-        log.info("Retention cleanup completed", { deleted });
+        log.info("Retention cleanup completed, deleted {deleted} rows", { deleted });
       }
     } catch (err) {
-      log.error("Retention cleanup failed", { error: String(err) });
+      log.error("Retention cleanup failed: {error}", { error: String(err) });
     }
   }, 24 * 60 * 60 * 1000); // daily
 
@@ -77,7 +79,7 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  log.info(`Server listening on ${config.server.host}:${config.server.port}`);
+  log.info("Server listening on {host}:{port}", { host: config.server.host, port: config.server.port });
 
   Bun.serve({
     fetch: app.fetch,
@@ -87,6 +89,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  log.error("Fatal error", { error: String(err) });
+  console.error("Fatal error:", err);
   process.exit(1);
 });

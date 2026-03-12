@@ -2,9 +2,9 @@ import { parseCertStreamMessage } from "./parser.ts";
 import { CertFilter } from "./filter.ts";
 import { BatchBuffer } from "./buffer.ts";
 import { metrics } from "../utils/metrics.ts";
-import { createLogger } from "../utils/logger.ts";
+import { getLogger } from "../utils/logger.ts";
 
-const log = createLogger("stream");
+const log = getLogger(["ctlog", "stream"]);
 
 const MAX_BACKOFF_MS = 60_000;
 const INITIAL_BACKOFF_MS = 1_000;
@@ -47,7 +47,7 @@ export class CertStreamClient {
   private connect() {
     if (this.stopped) return;
 
-    log.info("Connecting to CertStream", { url: this.url });
+    log.info("Connecting to CertStream at {url}", { url: this.url });
 
     this.ws = new WebSocket(this.url);
 
@@ -60,6 +60,7 @@ export class CertStreamClient {
     this.ws.onmessage = (event) => {
       const data = typeof event.data === "string" ? event.data : String(event.data);
       const cert = parseCertStreamMessage(data);
+      log.debug("Processed certificate for {domain}", {"domain": cert?.domains})
       if (!cert) return;
 
       metrics.increment("certsReceived");
@@ -73,11 +74,11 @@ export class CertStreamClient {
     };
 
     this.ws.onerror = (event) => {
-      log.error("WebSocket error", { error: String(event) });
+      log.error("WebSocket error: {error}", { error: String(event) });
     };
 
     this.ws.onclose = (event) => {
-      log.warn("WebSocket closed", { code: event.code, reason: event.reason });
+      log.warn("WebSocket closed with code {code}: {reason}", { code: event.code, reason: event.reason });
       this.stopPing();
       this.scheduleReconnect();
     };
@@ -87,7 +88,7 @@ export class CertStreamClient {
     if (this.stopped) return;
 
     metrics.increment("wsReconnections");
-    log.info("Reconnecting", { backoffMs: this.backoff });
+    log.info("Scheduling reconnect in {backoffMs}ms", { backoffMs: this.backoff });
 
     this.reconnectTimer = setTimeout(() => {
       this.connect();
