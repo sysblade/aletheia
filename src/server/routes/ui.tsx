@@ -4,15 +4,18 @@ import { HomePage, StatsCards } from "../views/home.tsx";
 import { SearchPage } from "../views/search.tsx";
 import { ResultsTable } from "../views/components/results-table.tsx";
 import { CertDetail } from "../views/components/cert-detail.tsx";
+import { LiveStreamRows } from "../views/components/live-stream.tsx";
 import { Layout } from "../views/layout.tsx";
 import { metrics } from "../../utils/metrics.ts";
 import { config } from "../../config.ts";
+
+const LIVE_STREAM_LIMIT = 25;
 
 export const uiRoutes = new Hono<AppEnv>();
 
 uiRoutes.get("/", async (c) => {
   const repo = c.get("repository");
-  const stats = await repo.getStats();
+  const [stats, recentCerts] = await Promise.all([repo.getStats(), repo.getRecent(LIVE_STREAM_LIMIT)]);
   const m = metrics.snapshot();
   const filterMode = config.filters.domains.length === 0 && config.filters.issuers.length === 0 ? "firehose" : "filtered";
 
@@ -22,6 +25,7 @@ uiRoutes.get("/", async (c) => {
       insertRate={metrics.insertRate()}
       uptimeSeconds={Math.floor((Date.now() - m.startedAt) / 1000)}
       filterMode={filterMode}
+      recentCerts={recentCerts}
     />,
   );
 });
@@ -88,6 +92,12 @@ uiRoutes.get("/cert/:id", async (c) => {
       <CertDetail cert={cert} />
     </Layout>,
   );
+});
+
+uiRoutes.get("/partials/live-stream", async (c) => {
+  const repo = c.get("repository");
+  const certs = await repo.getRecent(LIVE_STREAM_LIMIT);
+  return c.html(<LiveStreamRows certificates={certs} />);
 });
 
 uiRoutes.get("/partials/stats", async (c) => {

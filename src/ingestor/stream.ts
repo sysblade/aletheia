@@ -1,3 +1,4 @@
+import WebSocket from "ws";
 import { parseCertStreamMessage } from "./parser.ts";
 import { CertFilter } from "./filter.ts";
 import { BatchBuffer } from "./buffer.ts";
@@ -47,20 +48,25 @@ export class CertStreamClient {
   private connect() {
     if (this.stopped) return;
 
+    if (this.ws) {
+      this.ws.removeAllListeners();
+      this.ws.close();
+      this.ws = null;
+    }
+
     log.info("Connecting to CertStream at {url}", { url: this.url });
 
     this.ws = new WebSocket(this.url);
 
-    this.ws.onopen = () => {
+    this.ws.on("open", () => {
       log.info("Connected to CertStream");
       this.backoff = INITIAL_BACKOFF_MS;
       this.startPing();
-    };
+    });
 
-    this.ws.onmessage = (event) => {
-      const data = typeof event.data === "string" ? event.data : String(event.data);
-      const cert = parseCertStreamMessage(data);
-      log.debug("Processed certificate for {domain}", {"domain": cert?.domains})
+    this.ws.on("message", (data: WebSocket.RawData) => {
+      const message = data.toString();
+      const cert = parseCertStreamMessage(message);
       if (!cert) return;
 
       metrics.increment("certsReceived");
@@ -71,17 +77,21 @@ export class CertStreamClient {
       }
 
       this.buffer.push(cert);
-    };
+    });
 
-    this.ws.onerror = (event) => {
-      log.error("WebSocket error: {error}", { error: String(event) });
-    };
+    this.ws.on("error", (err: Error) => {
+      log.error("WebSocket error: {error}", { error: err.message });
+    });
 
-    this.ws.onclose = (event) => {
-      log.warn("WebSocket closed with code {code}: {reason}", { code: event.code, reason: event.reason });
+    this.ws.on("close", (code: number, reason: Buffer) => {
+      log.warn("WebSocket closed with code {code}: {reason}", {
+        code,
+        reason: reason.toString(),
+      });
+      this.ws = null;
       this.stopPing();
       this.scheduleReconnect();
-    };
+    });
   }
 
   private scheduleReconnect() {
@@ -100,7 +110,11 @@ export class CertStreamClient {
   private startPing() {
     this.pingTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: "ping" }));
+        try {
+          this.ws.send(JSON.stringify({ type: "ping" }));
+        } catch {
+          log.debug("Ping send failed, connection may be closing");
+        }
       }
     }, PING_INTERVAL_MS);
   }

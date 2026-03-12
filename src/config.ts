@@ -12,7 +12,7 @@ export const config = {
     retentionDays: Number(process.env.DB_RETENTION_DAYS) || 90,
   },
   certstream: {
-    url: process.env.CERTSTREAM_URL || "wss://certstream.calidog.io",
+    url: process.env.CERTSTREAM_URL || "wss://api.certstream.dev/",
   },
   batch: {
     size: Number(process.env.BATCH_SIZE) || 500,

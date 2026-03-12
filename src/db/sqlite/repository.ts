@@ -131,6 +131,16 @@ export class SqliteRepository implements CertificateRepository {
     return row ? rowToCertificate(row) : null;
   }
 
+  async getRecent(limit: number): Promise<Certificate[]> {
+    const rows = await this.db
+      .selectFrom("certificates")
+      .selectAll()
+      .orderBy("id", "desc")
+      .limit(limit)
+      .execute();
+    return rows.map(rowToCertificate);
+  }
+
   async getStats(): Promise<Stats> {
     const result = await this.db
       .selectFrom("certificates")
