@@ -149,6 +149,7 @@ export class SqliteRepository implements CertificateRepository {
         sql<number>`COUNT(DISTINCT issuer_org)`.as("unique_issuers"),
         sql<number | null>`MAX(seen_at)`.as("latest_seen_at"),
         sql<number | null>`MIN(seen_at)`.as("oldest_seen_at"),
+        sql<number>`SUM(CASE WHEN created_at > unixepoch() - 60 THEN 1 ELSE 0 END)`.as("recent_inserts"),
       ])
       .executeTakeFirstOrThrow();
 
@@ -157,6 +158,7 @@ export class SqliteRepository implements CertificateRepository {
       uniqueIssuers: result.unique_issuers,
       latestSeenAt: result.latest_seen_at,
       oldestSeenAt: result.oldest_seen_at,
+      insertRate: Math.round((result.recent_inserts / 60) * 10) / 10,
     };
   }
 

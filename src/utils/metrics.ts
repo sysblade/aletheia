@@ -9,6 +9,8 @@ export interface Metrics {
   startedAt: number;
 }
 
+const RATE_WINDOW_MS = 60_000;
+
 class MetricsCollector {
   private data: Metrics = {
     certsReceived: 0,
@@ -21,8 +23,13 @@ class MetricsCollector {
     startedAt: Date.now(),
   };
 
+  private insertWindow: { time: number; count: number }[] = [];
+
   increment(key: keyof Omit<Metrics, "lastBatchAt" | "startedAt">, amount = 1) {
     (this.data[key] as number) += amount;
+    if (key === "certsInserted") {
+      this.insertWindow.push({ time: Date.now(), count: amount });
+    }
   }
 
   recordBatch() {
@@ -35,9 +42,19 @@ class MetricsCollector {
   }
 
   insertRate(): number {
-    const elapsed = (Date.now() - this.data.startedAt) / 1000;
-    if (elapsed < 1) return 0;
-    return Math.round(this.data.certsInserted / elapsed);
+    const now = Date.now();
+
+    while (this.insertWindow.length > 0 && now - this.insertWindow[0]!.time > RATE_WINDOW_MS) {
+      this.insertWindow.shift();
+    }
+
+    if (this.insertWindow.length === 0) return 0;
+
+    const total = this.insertWindow.reduce((sum, s) => sum + s.count, 0);
+    const windowMs = Math.min(RATE_WINDOW_MS, now - this.data.startedAt);
+    if (windowMs < 1000) return 0;
+
+    return Math.round((total / (windowMs / 1000)) * 10) / 10;
   }
 }
 

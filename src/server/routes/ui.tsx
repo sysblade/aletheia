@@ -22,7 +22,6 @@ uiRoutes.get("/", async (c) => {
   return c.html(
     <HomePage
       stats={stats}
-      insertRate={metrics.insertRate()}
       uptimeSeconds={Math.floor((Date.now() - m.startedAt) / 1000)}
       filterMode={filterMode}
       recentCerts={recentCerts}
@@ -109,7 +108,6 @@ uiRoutes.get("/partials/stats", async (c) => {
   return c.html(
     <StatsCards
       stats={stats}
-      insertRate={metrics.insertRate()}
       uptimeSeconds={Math.floor((Date.now() - m.startedAt) / 1000)}
       filterMode={filterMode}
     />,

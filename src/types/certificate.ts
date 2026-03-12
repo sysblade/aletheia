@@ -51,4 +51,5 @@ export interface Stats {
   uniqueIssuers: number;
   latestSeenAt: number | null;
   oldestSeenAt: number | null;
+  insertRate: number;
 }
