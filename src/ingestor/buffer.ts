@@ -1,0 +1,57 @@
+import type { NewCertificate } from "../types/certificate.ts";
+import { createLogger } from "../utils/logger.ts";
+
+const log = createLogger("buffer");
+
+export class BatchBuffer {
+  private items: NewCertificate[] = [];
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private flushing = false;
+
+  constructor(
+    private maxSize: number,
+    private intervalMs: number,
+    private flushCallback: (batch: NewCertificate[]) => Promise<void>,
+  ) {}
+
+  start() {
+    this.timer = setInterval(() => {
+      void this.flush();
+    }, this.intervalMs);
+  }
+
+  stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+
+  push(cert: NewCertificate) {
+    this.items.push(cert);
+    if (this.items.length >= this.maxSize) {
+      void this.flush();
+    }
+  }
+
+  async flush(): Promise<void> {
+    if (this.flushing || this.items.length === 0) return;
+    this.flushing = true;
+
+    const batch = this.items;
+    this.items = [];
+
+    try {
+      await this.flushCallback(batch);
+    } catch (err) {
+      log.error("Flush failed, re-queuing batch", { error: String(err), batchSize: batch.length });
+      this.items = batch.concat(this.items);
+    } finally {
+      this.flushing = false;
+    }
+  }
+
+  get pending(): number {
+    return this.items.length;
+  }
+}

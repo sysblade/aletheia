@@ -1,0 +1,39 @@
+import type { Child } from "hono/jsx";
+
+export function Layout({ title, children }: { title?: string; children: Child }) {
+  const pageTitle = title ? `${title} - CT Log` : "CT Log - Certificate Transparency Monitor";
+
+  return (
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>{pageTitle}</title>
+        <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+        <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+        <style>{`
+          body { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; }
+          .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
+          .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+        `}</style>
+      </head>
+      <body class="bg-gray-900 text-gray-100 min-h-screen">
+        <nav class="bg-gray-800 border-b border-gray-700 px-6 py-3">
+          <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="text-xl font-bold text-green-400 hover:text-green-300">
+              CT Log
+            </a>
+            <div class="flex items-center space-x-4 text-sm text-gray-400">
+              <a href="/" class="hover:text-gray-200">Home</a>
+              <a href="/search" class="hover:text-gray-200">Search</a>
+              <a href="/api/stats" class="hover:text-gray-200">API</a>
+            </div>
+          </div>
+        </nav>
+        <main class="max-w-7xl mx-auto px-6 py-8">
+          {children}
+        </main>
+      </body>
+    </html>
+  );
+}
