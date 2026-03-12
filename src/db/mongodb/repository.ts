@@ -192,10 +192,10 @@ export class MongoRepository implements CertificateRepository {
 
     const [result] = await this.certs.aggregate(pipeline).toArray();
 
-    const total = result.total[0]?.count ?? 0;
-    const uniqueIssuers = result.uniqueIssuers[0]?.count ?? 0;
-    const latest = result.seenRange[0]?.latest ?? null;
-    const oldest = result.seenRange[0]?.oldest ?? null;
+    const total = result?.total[0]?.count ?? 0;
+    const uniqueIssuers = result?.uniqueIssuers[0]?.count ?? 0;
+    const latest = result?.seenRange[0]?.latest ?? null;
+    const oldest = result?.seenRange[0]?.oldest ?? null;
 
     return {
       totalCertificates: total,

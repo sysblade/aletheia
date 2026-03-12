@@ -1,22 +1,21 @@
+import { Worker } from "node:worker_threads";
 import type { CliCommand } from "./router.ts";
 import { loadConfig } from "../config.ts";
 import { getLogger } from "../utils/logger.ts";
 import { createRepository } from "../db/factory.ts";
-import { CertStreamClient } from "../ingestor/stream.ts";
 import { CertFilter } from "../ingestor/filter.ts";
-import { BatchBuffer } from "../ingestor/buffer.ts";
-import { BatchWriter } from "../ingestor/writer.ts";
 import { createApp } from "../server/app.ts";
-import { MetricsCollector } from "../utils/metrics.ts";
+import { MetricsStore } from "../utils/metrics.ts";
 import { EventBus } from "../utils/events.ts";
 import type { NewCertificate } from "../types/certificate.ts";
+import type { WorkerMessage, MainMessage } from "../ingestor/messages.ts";
 
 export const serveCommand: CliCommand = {
   name: "serve",
   description: "Start the CT Log monitor server (default)",
   async run() {
     const config = loadConfig();
-    const metrics = new MetricsCollector();
+    const metricsStore = new MetricsStore();
     const certEvents = new EventBus<NewCertificate[]>();
     const log = getLogger(["ctlog", "main"]);
 
@@ -31,21 +30,51 @@ export const serveCommand: CliCommand = {
     const filter = new CertFilter(config.filters.domains, config.filters.issuers);
     log.info("Filter mode: {mode}", { mode: filter.describe() });
 
-    const writer = new BatchWriter(repository, metrics, certEvents);
+    const worker = new Worker(new URL("../ingestor/worker.ts", import.meta.url), {
+      workerData: config,
+    });
 
-    const buffer = new BatchBuffer(config.batch.size, config.batch.intervalMs, (batch) => writer.write(batch));
-    buffer.start();
+    let stoppedResolve: (() => void) | null = null;
+    const stoppedPromise = new Promise<void>((resolve) => {
+      stoppedResolve = resolve;
+    });
 
-    const stream = new CertStreamClient(config.certstream.url, filter, buffer, metrics);
-    stream.start();
+    worker.on("message", (msg: WorkerMessage) => {
+      switch (msg.type) {
+        case "ready":
+          log.info("Ingest worker ready");
+          break;
+        case "batch-written":
+          metricsStore.update(msg.metrics);
+          certEvents.emit([]);
+          break;
+        case "error":
+          log.error("Ingest worker error: {message}", { message: msg.message });
+          break;
+        case "stopped":
+          log.info("Ingest worker stopped");
+          stoppedResolve?.();
+          break;
+      }
+    });
+
+    worker.on("error", (err) => {
+      log.error("Ingest worker thread error: {error}", { error: String(err) });
+    });
+
+    worker.on("exit", (code) => {
+      if (code !== 0) {
+        log.error("Ingest worker exited with code {code}", { code });
+      }
+      stoppedResolve?.();
+    });
 
     const app = createApp({
       repository,
-      metrics,
+      metrics: metricsStore,
       config,
       filter,
       certEvents,
-      healthProvider: () => ({ bufferPending: buffer.pending }),
     });
 
     const cleanupInterval = setInterval(async () => {
@@ -67,15 +96,23 @@ export const serveCommand: CliCommand = {
 
     log.info("Server listening on {host}:{port}", { host: config.server.host, port: config.server.port });
 
+    const SHUTDOWN_TIMEOUT_MS = 10_000;
+
     async function shutdown() {
       log.info("Shutting down...");
 
-      stream.stop();
-      buffer.stop();
-      clearInterval(cleanupInterval);
+      worker.postMessage({ type: "shutdown" } satisfies MainMessage);
+      await Promise.race([
+        stoppedPromise,
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            log.warn("Worker shutdown timed out after {ms}ms, forcing exit", { ms: SHUTDOWN_TIMEOUT_MS });
+            resolve();
+          }, SHUTDOWN_TIMEOUT_MS),
+        ),
+      ]);
 
-      await buffer.flush();
-      log.info("Buffer flushed");
+      clearInterval(cleanupInterval);
 
       server.stop();
       log.info("Server stopped");

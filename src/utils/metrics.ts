@@ -9,10 +9,21 @@ export interface Metrics {
   startedAt: number;
 }
 
+export interface MetricsSnapshot extends Metrics {
+  insertRate: number;
+  bufferPending: number;
+}
+
+export interface MetricsReader {
+  snapshot(): Readonly<Metrics>;
+  insertRate(): number;
+  bufferPending(): number;
+}
+
 const RATE_WINDOW_MS = 60_000;
 
-export class MetricsCollector {
-  private data: Metrics = {
+function zeroMetrics(): Metrics {
+  return {
     certsReceived: 0,
     certsFiltered: 0,
     certsInserted: 0,
@@ -22,7 +33,10 @@ export class MetricsCollector {
     lastBatchAt: null,
     startedAt: Date.now(),
   };
+}
 
+export class MetricsCollector implements MetricsReader {
+  private data: Metrics = zeroMetrics();
   private insertWindow: { time: number; count: number }[] = [];
 
   increment(key: keyof Omit<Metrics, "lastBatchAt" | "startedAt">, amount = 1) {
@@ -60,5 +74,33 @@ export class MetricsCollector {
 
     return Math.round((total / (windowMs / 1000)) * 10) / 10;
   }
+
+  bufferPending(): number {
+    return 0;
+  }
 }
 
+export class MetricsStore implements MetricsReader {
+  private data: Metrics = zeroMetrics();
+  private rate = 0;
+  private pending = 0;
+
+  update(snap: MetricsSnapshot): void {
+    const { insertRate, bufferPending, ...base } = snap;
+    this.data = base;
+    this.rate = insertRate;
+    this.pending = bufferPending;
+  }
+
+  snapshot(): Readonly<Metrics> {
+    return { ...this.data };
+  }
+
+  insertRate(): number {
+    return this.rate;
+  }
+
+  bufferPending(): number {
+    return this.pending;
+  }
+}
