@@ -1,0 +1,34 @@
+import { MongoClient, type Db } from "mongodb";
+import type { CertificateDocument, CounterDocument } from "./schema.ts";
+import { getLogger } from "../../utils/logger.ts";
+
+const log = getLogger(["ctlog", "mongodb"]);
+
+export async function connectMongo(url: string, database: string): Promise<Db> {
+  const redactedUrl = url.replace(/:\/\/[^@]*@/, "://***@");
+  log.info("Connecting to MongoDB at {url}, database {database}", { url: redactedUrl, database });
+
+  const client = new MongoClient(url);
+  await client.connect();
+
+  const db = client.db(database);
+
+  const certs = db.collection<CertificateDocument>("certificates");
+  await certs.createIndex({ fingerprint: 1 }, { unique: true });
+  await certs.createIndex({ numericId: 1 }, { unique: true });
+  await certs.createIndex({ seenAt: -1 });
+  await certs.createIndex({ domains: "text", issuerOrg: "text", subjectCn: "text" });
+
+  await certs.dropIndex("issuerOrg_1").catch(() => {});
+  await certs.dropIndex("createdAt_-1").catch(() => {});
+
+  await db.collection<CounterDocument>("counters").updateOne(
+    { _id: "certificates" },
+    { $setOnInsert: { seq: 0 } },
+    { upsert: true },
+  );
+
+  log.info("MongoDB connected, indexes ensured");
+
+  return db;
+}

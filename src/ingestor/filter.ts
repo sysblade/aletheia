@@ -19,6 +19,10 @@ export class CertFilter {
     this.isFirehose = this.domainPatterns.length === 0 && this.issuerSubstrings.length === 0;
   }
 
+  get mode(): "firehose" | "filtered" {
+    return this.isFirehose ? "firehose" : "filtered";
+  }
+
   matches(cert: NewCertificate): boolean {
     if (this.isFirehose) return true;
 

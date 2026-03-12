@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import type { AppEnv } from "../app.ts";
 import { HomePage, StatsCards } from "../views/home.tsx";
 import { SearchPage } from "../views/search.tsx";
@@ -6,8 +7,6 @@ import { ResultsTable } from "../views/components/results-table.tsx";
 import { CertDetail } from "../views/components/cert-detail.tsx";
 import { LiveStreamRows } from "../views/components/live-stream.tsx";
 import { Layout } from "../views/layout.tsx";
-import { metrics } from "../../utils/metrics.ts";
-import { config } from "../../config.ts";
 
 const LIVE_STREAM_LIMIT = 25;
 
@@ -15,15 +14,18 @@ export const uiRoutes = new Hono<AppEnv>();
 
 uiRoutes.get("/", async (c) => {
   const repo = c.get("repository");
-  const [stats, recentCerts] = await Promise.all([repo.getStats(), repo.getRecent(LIVE_STREAM_LIMIT)]);
+  const metrics = c.get("metrics");
+  const filter = c.get("filter");
+  const getStats = c.get("getStats");
+  const [stats, recentCerts] = await Promise.all([getStats(), repo.getRecent(LIVE_STREAM_LIMIT)]);
   const m = metrics.snapshot();
-  const filterMode = config.filters.domains.length === 0 && config.filters.issuers.length === 0 ? "firehose" : "filtered";
 
   return c.html(
     <HomePage
       stats={stats}
+      insertRate={metrics.insertRate()}
       uptimeSeconds={Math.floor((Date.now() - m.startedAt) / 1000)}
-      filterMode={filterMode}
+      filterMode={filter.mode}
       recentCerts={recentCerts}
     />,
   );
@@ -100,16 +102,49 @@ uiRoutes.get("/partials/live-stream", async (c) => {
 });
 
 uiRoutes.get("/partials/stats", async (c) => {
-  const repo = c.get("repository");
-  const stats = await repo.getStats();
+  const metrics = c.get("metrics");
+  const filter = c.get("filter");
+  const getStats = c.get("getStats");
+  const stats = await getStats();
   const m = metrics.snapshot();
-  const filterMode = config.filters.domains.length === 0 && config.filters.issuers.length === 0 ? "firehose" : "filtered";
 
   return c.html(
     <StatsCards
       stats={stats}
+      insertRate={metrics.insertRate()}
       uptimeSeconds={Math.floor((Date.now() - m.startedAt) / 1000)}
-      filterMode={filterMode}
+      filterMode={filter.mode}
     />,
   );
+});
+
+uiRoutes.get("/events/live-stream", async (c) => {
+  const repo = c.get("repository");
+  const certEvents = c.get("certEvents");
+
+  return streamSSE(c, async (stream) => {
+    const certs = await repo.getRecent(LIVE_STREAM_LIMIT);
+    const initialHtml = (<LiveStreamRows certificates={certs} />).toString();
+    await stream.writeSSE({ data: initialHtml, event: "certificates" });
+
+    let aborted = false;
+
+    const unsubscribe = certEvents.subscribe(async () => {
+      if (aborted) return;
+      try {
+        const recent = await repo.getRecent(LIVE_STREAM_LIMIT);
+        const html = (<LiveStreamRows certificates={recent} />).toString();
+        await stream.writeSSE({ data: html, event: "certificates" });
+      } catch {}
+    });
+
+    stream.onAbort(() => {
+      aborted = true;
+      unsubscribe();
+    });
+
+    while (!aborted) {
+      await stream.sleep(30_000);
+    }
+  });
 });

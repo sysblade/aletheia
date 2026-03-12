@@ -1,7 +1,7 @@
 import { sql } from "kysely";
 import type { Kysely } from "kysely";
-import type { CertificateRepository } from "../repository.ts";
-import type { Certificate, NewCertificate, SearchOpts, SearchResult, Stats } from "../../types/certificate.ts";
+import { SearchError, type CertificateRepository } from "../repository.ts";
+import type { Certificate, ExportBatch, NewCertificate, SearchOpts, SearchResult, Stats } from "../../types/certificate.ts";
 import type { Database, CertificateRow } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
 
@@ -149,7 +149,6 @@ export class SqliteRepository implements CertificateRepository {
         sql<number>`COUNT(DISTINCT issuer_org)`.as("unique_issuers"),
         sql<number | null>`MAX(seen_at)`.as("latest_seen_at"),
         sql<number | null>`MIN(seen_at)`.as("oldest_seen_at"),
-        sql<number>`SUM(CASE WHEN created_at > unixepoch() - 60 THEN 1 ELSE 0 END)`.as("recent_inserts"),
       ])
       .executeTakeFirstOrThrow();
 
@@ -158,7 +157,6 @@ export class SqliteRepository implements CertificateRepository {
       uniqueIssuers: result.unique_issuers,
       latestSeenAt: result.latest_seen_at,
       oldestSeenAt: result.oldest_seen_at,
-      insertRate: Math.round((result.recent_inserts / 60) * 10) / 10,
     };
   }
 
@@ -174,20 +172,33 @@ export class SqliteRepository implements CertificateRepository {
 
     if (deleted > 0) {
       log.info("Cleanup completed, deleted {deleted} rows older than {olderThanDays} days", { deleted, olderThanDays });
+      await sql`INSERT INTO certificates_fts(certificates_fts) VALUES('merge=500')`.execute(this.db);
     }
 
     return deleted;
   }
 
+  async exportBatch(cursor: number | null, limit: number): Promise<ExportBatch> {
+    let query = this.db
+      .selectFrom("certificates")
+      .selectAll()
+      .orderBy("id", "asc")
+      .limit(limit);
+
+    if (cursor !== null) {
+      query = query.where("id", ">", cursor);
+    }
+
+    const rows = await query.execute();
+    const certificates = rows.map(rowToCertificate);
+    const nextCursor = rows.length < limit ? null : rows[rows.length - 1]!.id;
+
+    return { certificates, cursor: nextCursor };
+  }
+
   async close(): Promise<void> {
+    await sql`PRAGMA optimize`.execute(this.db);
     await this.db.destroy();
     log.info("Database connection closed");
-  }
-}
-
-export class SearchError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SearchError";
   }
 }

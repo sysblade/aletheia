@@ -11,7 +11,7 @@ export interface Metrics {
 
 const RATE_WINDOW_MS = 60_000;
 
-class MetricsCollector {
+export class MetricsCollector {
   private data: Metrics = {
     certsReceived: 0,
     certsFiltered: 0,
@@ -43,12 +43,16 @@ class MetricsCollector {
 
   insertRate(): number {
     const now = Date.now();
+    const cutoff = now - RATE_WINDOW_MS;
 
-    while (this.insertWindow.length > 0 && now - this.insertWindow[0]!.time > RATE_WINDOW_MS) {
-      this.insertWindow.shift();
+    const firstValid = this.insertWindow.findIndex((e) => e.time > cutoff);
+    if (firstValid === -1) {
+      this.insertWindow = [];
+      return 0;
     }
-
-    if (this.insertWindow.length === 0) return 0;
+    if (firstValid > 0) {
+      this.insertWindow = this.insertWindow.slice(firstValid);
+    }
 
     const total = this.insertWindow.reduce((sum, s) => sum + s.count, 0);
     const windowMs = Math.min(RATE_WINDOW_MS, now - this.data.startedAt);
@@ -58,4 +62,3 @@ class MetricsCollector {
   }
 }
 
-export const metrics = new MetricsCollector();

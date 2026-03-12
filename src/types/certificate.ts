@@ -51,5 +51,9 @@ export interface Stats {
   uniqueIssuers: number;
   latestSeenAt: number | null;
   oldestSeenAt: number | null;
-  insertRate: number;
+}
+
+export interface ExportBatch {
+  certificates: Certificate[];
+  cursor: number | null;
 }

@@ -14,11 +14,13 @@ function formatUptime(seconds: number): string {
 
 export function HomePage({
   stats,
+  insertRate,
   uptimeSeconds,
   filterMode,
   recentCerts,
 }: {
   stats: Stats;
+  insertRate: number;
   uptimeSeconds: number;
   filterMode: string;
   recentCerts: Certificate[];
@@ -42,7 +44,7 @@ export function HomePage({
         hx-trigger="every 5s"
         hx-swap="innerHTML"
       >
-        <StatsCards stats={stats} uptimeSeconds={uptimeSeconds} filterMode={filterMode} />
+        <StatsCards stats={stats} insertRate={insertRate} uptimeSeconds={uptimeSeconds} filterMode={filterMode} />
       </div>
 
       <LiveStreamSection certificates={recentCerts} />
@@ -52,10 +54,12 @@ export function HomePage({
 
 export function StatsCards({
   stats,
+  insertRate,
   uptimeSeconds,
   filterMode,
 }: {
   stats: Stats;
+  insertRate: number;
   uptimeSeconds: number;
   filterMode: string;
 }) {
@@ -63,7 +67,7 @@ export function StatsCards({
     <>
       <StatsCard label="Total Certificates" value={stats.totalCertificates} />
       <StatsCard label="Unique Issuers" value={stats.uniqueIssuers} />
-      <StatsCard label="Insert Rate" value={`${stats.insertRate}/s`} sub={filterMode} />
+      <StatsCard label="Insert Rate" value={`${insertRate}/s`} sub={filterMode} />
       <StatsCard label="Uptime" value={formatUptime(uptimeSeconds)} />
     </>
   );

@@ -1,7 +1,5 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../app.ts";
-import { metrics } from "../../utils/metrics.ts";
-import { config } from "../../config.ts";
 
 export const apiRoutes = new Hono<AppEnv>();
 
@@ -36,8 +34,11 @@ apiRoutes.get("/cert/:id", async (c) => {
 });
 
 apiRoutes.get("/stats", async (c) => {
-  const repo = c.get("repository");
-  const stats = await repo.getStats();
+  const metrics = c.get("metrics");
+  const filter = c.get("filter");
+  const config = c.get("config");
+  const getStats = c.get("getStats");
+  const stats = await getStats();
   const m = metrics.snapshot();
 
   return c.json({
@@ -55,7 +56,7 @@ apiRoutes.get("/stats", async (c) => {
     filters: {
       domains: config.filters.domains,
       issuers: config.filters.issuers,
-      mode: config.filters.domains.length === 0 && config.filters.issuers.length === 0 ? "firehose" : "filtered",
+      mode: filter.mode,
     },
   });
 });

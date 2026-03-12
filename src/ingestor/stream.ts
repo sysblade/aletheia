@@ -2,7 +2,7 @@ import WebSocket from "ws";
 import { parseCertStreamMessage } from "./parser.ts";
 import { CertFilter } from "./filter.ts";
 import { BatchBuffer } from "./buffer.ts";
-import { metrics } from "../utils/metrics.ts";
+import type { MetricsCollector } from "../utils/metrics.ts";
 import { getLogger } from "../utils/logger.ts";
 
 const log = getLogger(["ctlog", "stream"]);
@@ -22,6 +22,7 @@ export class CertStreamClient {
     private url: string,
     private filter: CertFilter,
     private buffer: BatchBuffer,
+    private metrics: MetricsCollector,
   ) {}
 
   start() {
@@ -69,10 +70,10 @@ export class CertStreamClient {
       const cert = parseCertStreamMessage(message);
       if (!cert) return;
 
-      metrics.increment("certsReceived");
+      this.metrics.increment("certsReceived");
 
       if (!this.filter.matches(cert)) {
-        metrics.increment("certsFiltered");
+        this.metrics.increment("certsFiltered");
         return;
       }
 
@@ -97,7 +98,7 @@ export class CertStreamClient {
   private scheduleReconnect() {
     if (this.stopped) return;
 
-    metrics.increment("wsReconnections");
+    this.metrics.increment("wsReconnections");
     log.info("Scheduling reconnect in {backoffMs}ms", { backoffMs: this.backoff });
 
     this.reconnectTimer = setTimeout(() => {
@@ -111,7 +112,7 @@ export class CertStreamClient {
     this.pingTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         try {
-          this.ws.send(JSON.stringify({ type: "ping" }));
+          this.ws.ping();
         } catch {
           log.debug("Ping send failed, connection may be closing");
         }

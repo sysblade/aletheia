@@ -59,9 +59,9 @@ export function LiveStreamSection({ certificates }: { certificates: Certificate[
             </tr>
           </thead>
           <tbody
-            hx-get="/partials/live-stream"
-            hx-trigger="every 3s"
-            hx-swap="innerHTML"
+            hx-ext="sse"
+            sse-connect="/events/live-stream"
+            sse-swap="certificates"
           >
             <LiveStreamRows certificates={certificates} />
           </tbody>

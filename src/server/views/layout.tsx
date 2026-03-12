@@ -11,6 +11,7 @@ export function Layout({ title, children }: { title?: string; children: Child })
         <title>{pageTitle}</title>
         <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
         <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+        <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
         <style>{`
           body { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; }
           .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }

@@ -4,6 +4,8 @@ import { getLogger } from "../../utils/logger.ts";
 
 import * as m001 from "./migrations/001_create_certificates.ts";
 import * as m002 from "./migrations/002_create_fts_index.ts";
+import * as m003 from "./migrations/003_fts_update_trigger.ts";
+import * as m004 from "./migrations/004_fts_detail_none.ts";
 
 const log = getLogger(["ctlog", "migrate"]);
 
@@ -12,6 +14,8 @@ class StaticMigrationProvider implements MigrationProvider {
     return {
       "001_create_certificates": m001,
       "002_create_fts_index": m002,
+      "003_fts_update_trigger": m003,
+      "004_fts_detail_none": m004,
     };
   }
 }
