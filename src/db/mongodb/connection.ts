@@ -1,5 +1,5 @@
 import { MongoClient, type Db, type IndexSpecification, type CreateIndexesOptions } from "mongodb";
-import type { CertificateDocument, CounterDocument } from "./schema.ts";
+import type { CertificateDocument } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
 import type { Config } from "../../config.ts";
 
@@ -59,23 +59,16 @@ export async function connectMongo(mongoCfg: Config["mongo"], skipIndexManagemen
       dropIndexSafe("domains_text_issuerOrg_text_subjectCn_text"),
       dropIndexSafe("issuerOrg_1"),
       dropIndexSafe("createdAt_-1"),
+      dropIndexSafe("numericId_1"),
     ]);
 
     // Create required indexes (MongoDB skips if they exist)
     await Promise.all([
       createIndexSafe({ fingerprint: 1 }, { unique: true }, "fingerprint"),
-      createIndexSafe({ numericId: 1 }, { unique: true }, "numericId"),
       createIndexSafe({ seenAt: -1 }, {}, "seenAt"),
       createIndexSafe({ notAfter: 1 }, {}, "notAfter"),
       createIndexSafe({ issuerOrg: 1 }, {}, "issuerOrg"),
     ]);
-
-    // Initialize counter
-    await db.collection<CounterDocument>("counters").updateOne(
-      { _id: "certificates" },
-      { $setOnInsert: { seq: 0 } },
-      { upsert: true },
-    );
 
     log.info("MongoDB connected, indexes ensured (pool: max={max}, min={min}, maxIdle={maxIdle}ms, socketTimeout={timeout}ms)", {
       max: mongoCfg.maxPoolSize,

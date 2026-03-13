@@ -73,18 +73,17 @@ export function parseArgs(args: string[]): { source: StoreType; target: StoreTyp
   return { source: source as StoreType, target: target as StoreType, batchSize };
 }
 
-async function loadCursor(): Promise<number | null> {
+async function loadCursor(): Promise<string | null> {
   try {
-    const saved = await Bun.file(CURSOR_FILE).text();
-    const cursor = Number(saved);
-    return Number.isFinite(cursor) ? cursor : null;
+    const saved = (await Bun.file(CURSOR_FILE).text()).trim();
+    return saved.length > 0 ? saved : null;
   } catch {
     return null;
   }
 }
 
-async function saveCursor(cursor: number): Promise<void> {
-  await Bun.write(CURSOR_FILE, String(cursor));
+async function saveCursor(cursor: string): Promise<void> {
+  await Bun.write(CURSOR_FILE, cursor);
 }
 
 async function removeCursor(): Promise<void> {

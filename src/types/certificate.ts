@@ -3,7 +3,6 @@
  * Represents a certificate that has been persisted to the repository.
  */
 export interface Certificate {
-  id: number;
   fingerprint: string;
   domains: string[];
   domainCount: number;
@@ -76,7 +75,7 @@ export interface Stats {
  */
 export interface ExportBatch {
   certificates: Certificate[];
-  cursor: number | null;
+  cursor: string | null;
 }
 
 /**

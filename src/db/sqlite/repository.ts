@@ -23,7 +23,6 @@ function parseDomains(raw: string): string[] {
 
 function rowToCertificate(row: CertificateRow): Certificate {
   return {
-    id: row.id,
     fingerprint: row.fingerprint,
     domains: parseDomains(row.domains),
     domainCount: row.domain_count,
@@ -204,11 +203,11 @@ export class SqliteRepository implements CertificateRepository {
     }
   }
 
-  async getById(id: number): Promise<Certificate | null> {
+  async getByFingerprint(fingerprint: string): Promise<Certificate | null> {
     const row = await this.db
       .selectFrom("certificates")
       .selectAll()
-      .where("id", "=", id)
+      .where("fingerprint", "=", fingerprint)
       .executeTakeFirst();
 
     return row ? rowToCertificate(row) : null;
@@ -218,7 +217,7 @@ export class SqliteRepository implements CertificateRepository {
     const rows = await this.db
       .selectFrom("certificates")
       .selectAll()
-      .orderBy("id", "desc")
+      .orderBy("seen_at", "desc")
       .limit(limit)
       .execute();
     return rows.map(rowToCertificate);
@@ -287,20 +286,24 @@ export class SqliteRepository implements CertificateRepository {
     }
   }
 
-  async exportBatch(cursor: number | null, limit: number): Promise<ExportBatch> {
+  async exportBatch(cursor: string | null, limit: number): Promise<ExportBatch> {
+    // Use internal auto-increment id as cursor to guarantee monotonic ordering.
+    // New inserts always get a higher id, so records added during migration are never skipped.
+    const numericCursor = cursor !== null ? Number(cursor) : null;
+
     let query = this.db
       .selectFrom("certificates")
       .selectAll()
       .orderBy("id", "asc")
       .limit(limit);
 
-    if (cursor !== null) {
-      query = query.where("id", ">", cursor);
+    if (numericCursor !== null) {
+      query = query.where("id", ">", numericCursor);
     }
 
     const rows = await query.execute();
     const certificates = rows.map(rowToCertificate);
-    const nextCursor = rows.length < limit ? null : rows[rows.length - 1]!.id;
+    const nextCursor = rows.length < limit ? null : String(rows[rows.length - 1]!.id);
 
     return { certificates, cursor: nextCursor };
   }

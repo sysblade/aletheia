@@ -62,20 +62,11 @@ uiRoutes.get("/search/results", async (c) => {
   );
 });
 
-uiRoutes.get("/cert/:id", async (c) => {
+uiRoutes.get("/cert/:fingerprint", async (c) => {
   const repo = c.get("repository");
-  const id = Number(c.req.param("id"));
+  const fingerprint = c.req.param("fingerprint");
 
-  if (!Number.isFinite(id) || id < 1) {
-    return c.html(
-      <Layout title="Not Found">
-        <div class="text-center py-12 text-gray-400">Invalid certificate ID</div>
-      </Layout>,
-      400,
-    );
-  }
-
-  const cert = await repo.getById(id);
+  const cert = await repo.getByFingerprint(fingerprint);
   if (!cert) {
     return c.html(
       <Layout title="Not Found">

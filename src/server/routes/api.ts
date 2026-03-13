@@ -18,15 +18,11 @@ apiRoutes.get("/search", async (c) => {
   return c.json(result);
 });
 
-apiRoutes.get("/cert/:id", async (c) => {
+apiRoutes.get("/cert/:fingerprint", async (c) => {
   const repo = c.get("repository");
-  const id = Number(c.req.param("id"));
+  const fingerprint = c.req.param("fingerprint");
 
-  if (!Number.isFinite(id) || id < 1) {
-    return c.json({ error: "Invalid certificate ID" }, 400);
-  }
-
-  const cert = await repo.getById(id);
+  const cert = await repo.getByFingerprint(fingerprint);
   if (!cert) {
     return c.json({ error: "Certificate not found" }, 404);
   }

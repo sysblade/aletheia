@@ -8,7 +8,7 @@ function makeRepo(overrides?: Partial<CertificateRepository>): CertificateReposi
   return {
     insertBatch: mock(() => Promise.resolve(0)),
     search: mock(() => Promise.resolve({ certificates: [], total: 0, page: 1, limit: 50, totalPages: 0 })),
-    getById: mock(() => Promise.resolve(null)),
+    getByFingerprint: mock(() => Promise.resolve(null)),
     getRecent: mock(() => Promise.resolve([])),
     getStats: mock(() => Promise.resolve({ totalCertificates: 0, uniqueIssuers: 0, latestSeenAt: null, oldestSeenAt: null })),
     getHourlyStats: mock(() => Promise.resolve([])),

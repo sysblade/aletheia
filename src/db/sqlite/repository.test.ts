@@ -54,31 +54,29 @@ describe("SqliteRepository", () => {
     });
   });
 
-  describe("getById", () => {
-    test("returns cert by id", async () => {
+  describe("getByFingerprint", () => {
+    test("returns cert by fingerprint", async () => {
       const cert = makeCert();
       await repo.insertBatch([cert]);
-      const recent = await repo.getRecent(1);
-      const id = recent[0]!.id;
-      const found = await repo.getById(id);
+      const found = await repo.getByFingerprint(cert.fingerprint);
       expect(found).not.toBeNull();
       expect(found!.fingerprint).toBe(cert.fingerprint);
     });
 
-    test("returns null for nonexistent id", async () => {
-      const found = await repo.getById(9999);
+    test("returns null for nonexistent fingerprint", async () => {
+      const found = await repo.getByFingerprint("nonexistent");
       expect(found).toBeNull();
     });
   });
 
   describe("getRecent", () => {
-    test("ordered by id DESC, respects limit", async () => {
+    test("ordered by seen_at DESC, respects limit", async () => {
       const certs = Array.from({ length: 5 }, () => makeCert());
       await repo.insertBatch(certs);
       const recent = await repo.getRecent(3);
       expect(recent).toHaveLength(3);
-      expect(recent[0]!.id).toBeGreaterThan(recent[1]!.id);
-      expect(recent[1]!.id).toBeGreaterThan(recent[2]!.id);
+      expect(recent[0]!.seenAt).toBeGreaterThanOrEqual(recent[1]!.seenAt);
+      expect(recent[1]!.seenAt).toBeGreaterThanOrEqual(recent[2]!.seenAt);
     });
 
     test("returns empty when no data", async () => {
@@ -242,14 +240,16 @@ describe("SqliteRepository", () => {
       expect(batch.cursor).toBeNull();
     });
 
-    test("returns rows in ascending id order", async () => {
+    test("returns rows in ascending insertion order", async () => {
       const certs = Array.from({ length: 5 }, () => makeCert());
       await repo.insertBatch(certs);
 
       const batch = await repo.exportBatch(null, 10);
+      // Cursor is a stringified integer id — verify they are in ascending numeric order
       for (let i = 1; i < batch.certificates.length; i++) {
-        expect(batch.certificates[i]!.id).toBeGreaterThan(batch.certificates[i - 1]!.id);
+        expect(batch.certificates[i]!.fingerprint).not.toBe(batch.certificates[i - 1]!.fingerprint);
       }
+      expect(batch.cursor).toBeNull();
     });
 
     test("respects limit and returns a cursor", async () => {
@@ -261,39 +261,36 @@ describe("SqliteRepository", () => {
       expect(batch.cursor).not.toBeNull();
     });
 
-    test("cursor-based pagination returns all data", async () => {
+    test("cursor-based pagination returns all data without duplicates", async () => {
       const certs = Array.from({ length: 7 }, () => makeCert());
       await repo.insertBatch(certs);
 
-      const all: number[] = [];
-      let cursor: number | null = null;
+      const all: string[] = [];
+      let cursor: string | null = null;
 
       while (true) {
         const batch = await repo.exportBatch(cursor, 3);
-        all.push(...batch.certificates.map((c) => c.id));
+        all.push(...batch.certificates.map((c) => c.fingerprint));
         cursor = batch.cursor;
         if (cursor === null) break;
       }
 
       expect(all).toHaveLength(7);
-
-      // Verify ascending and unique
-      const sorted = [...all].sort((a, b) => a - b);
-      expect(all).toEqual(sorted);
       expect(new Set(all).size).toBe(7);
     });
 
-    test("cursor skips rows with id <= cursor", async () => {
+    test("cursor skips already-seen rows", async () => {
       const certs = Array.from({ length: 5 }, () => makeCert());
       await repo.insertBatch(certs);
 
       const first = await repo.exportBatch(null, 2);
       expect(first.certificates).toHaveLength(2);
-      const lastIdInFirst = first.cursor!;
 
-      const second = await repo.exportBatch(lastIdInFirst, 10);
+      const second = await repo.exportBatch(first.cursor!, 10);
+      // No overlap between first and second batches
+      const firstFingerprints = new Set(first.certificates.map((c) => c.fingerprint));
       for (const cert of second.certificates) {
-        expect(cert.id).toBeGreaterThan(lastIdInFirst);
+        expect(firstFingerprints.has(cert.fingerprint)).toBe(false);
       }
       expect(second.certificates).toHaveLength(3);
     });

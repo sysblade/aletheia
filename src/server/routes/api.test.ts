@@ -109,16 +109,9 @@ describe("API routes", () => {
     });
   });
 
-  describe("GET /api/cert/:id", () => {
-    test("returns 400 for invalid id", async () => {
-      const res = await app.request("/api/cert/abc");
-      expect(res.status).toBe(400);
-      const body = await json(res);
-      expect(body.error).toContain("Invalid");
-    });
-
-    test("returns 404 for nonexistent id", async () => {
-      const res = await app.request("/api/cert/9999");
+  describe("GET /api/cert/:fingerprint", () => {
+    test("returns 404 for nonexistent fingerprint", async () => {
+      const res = await app.request("/api/cert/nonexistent");
       expect(res.status).toBe(404);
       const body = await json(res);
       expect(body.error).toContain("not found");
@@ -127,10 +120,8 @@ describe("API routes", () => {
     test("returns 200 with cert data", async () => {
       const cert = makeCert();
       await repo.insertBatch([cert]);
-      const recent = await repo.getRecent(1);
-      const id = recent[0]!.id;
 
-      const res = await app.request(`/api/cert/${id}`);
+      const res = await app.request(`/api/cert/${cert.fingerprint}`);
       expect(res.status).toBe(200);
       const body = await json(res);
       expect(body.fingerprint).toBe(cert.fingerprint);
@@ -170,7 +161,7 @@ describe("API routes", () => {
     test("SearchError returns 400 JSON", async () => {
       const failRepo: CertificateRepository = {
         insertBatch: (c) => repo.insertBatch(c),
-        getById: (id) => repo.getById(id),
+        getByFingerprint: (fp) => repo.getByFingerprint(fp),
         getRecent: (l) => repo.getRecent(l),
         getStats: () => repo.getStats(),
         getHourlyStats: (from, to) => repo.getHourlyStats(from, to),

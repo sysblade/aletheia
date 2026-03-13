@@ -22,8 +22,8 @@ export interface CertificateRepository {
   /** Search certificates using FTS query. Supports column filters (domain:, issuer:, cn:) and negation (-term). */
   search(query: string, opts: SearchOpts): Promise<SearchResult>;
 
-  /** Get single certificate by numeric ID. Returns null if not found. */
-  getById(id: number): Promise<Certificate | null>;
+  /** Get single certificate by fingerprint. Returns null if not found. */
+  getByFingerprint(fingerprint: string): Promise<Certificate | null>;
 
   /** Get most recently inserted certificates. */
   getRecent(limit: number): Promise<Certificate[]>;
@@ -37,8 +37,8 @@ export interface CertificateRepository {
   /** Run database maintenance operations (optimize, checkpoint, analyze). */
   maintenance(): Promise<void>;
 
-  /** Export certificates in batches for data migration. Uses cursor-based pagination. */
-  exportBatch(cursor: number | null, limit: number): Promise<ExportBatch>;
+  /** Export certificates in batches for data migration. Uses cursor-based pagination (fingerprint-ordered). */
+  exportBatch(cursor: string | null, limit: number): Promise<ExportBatch>;
 
   /** Get hourly stats for a time range. Returns empty array if no data. */
   getHourlyStats(fromTimestamp: number, toTimestamp: number): Promise<HourlyStats[]>;

@@ -1,10 +1,10 @@
 import type { Db, Collection, Filter } from "mongodb";
-import { MongoBulkWriteError } from "mongodb";
+import { MongoBulkWriteError, ObjectId } from "mongodb";
 import { SearchError, type CertificateRepository } from "../repository.ts";
 import { parseSearchQuery } from "../search-query.ts";
 import type { SearchTerm } from "../search-query.ts";
 import type { Certificate, DailyStats, ExportBatch, HourlyStats, NewCertificate, SearchOpts, SearchResult, Stats, TopEntry } from "../../types/certificate.ts";
-import type { CertificateDocument, CounterDocument, DailyStatsDocument, HourlyStatsDocument } from "./schema.ts";
+import type { CertificateDocument, DailyStatsDocument, HourlyStatsDocument } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
 import { extractTwoLevelDomain, isWildcardDomain } from "../../utils/domain.ts";
 
@@ -12,7 +12,6 @@ const log = getLogger(["ctlog", "mongodb", "repository"]);
 
 function docToCertificate(doc: CertificateDocument): Certificate {
   return {
-    id: doc.numericId,
     fingerprint: doc.fingerprint,
     domains: doc.domains,
     domainCount: doc.domainCount,
@@ -74,35 +73,21 @@ function docToDailyStats(doc: DailyStatsDocument): DailyStats {
  */
 export class MongoRepository implements CertificateRepository {
   private certs: Collection<CertificateDocument>;
-  private counters: Collection<CounterDocument>;
   private hourlyStats: Collection<HourlyStatsDocument>;
   private dailyStats: Collection<DailyStatsDocument>;
 
   constructor(private db: Db) {
     this.certs = db.collection<CertificateDocument>("certificates");
-    this.counters = db.collection<CounterDocument>("counters");
     this.hourlyStats = db.collection<HourlyStatsDocument>("hourly_stats");
     this.dailyStats = db.collection<DailyStatsDocument>("daily_stats");
-  }
-
-  private async nextIdRange(count: number): Promise<number> {
-    const result = await this.counters.findOneAndUpdate(
-      { _id: "certificates" },
-      { $inc: { seq: count } },
-      { returnDocument: "after" },
-    );
-    if (!result) throw new Error("Failed to allocate ID range");
-    return result.seq - count + 1;
   }
 
   async insertBatch(certs: NewCertificate[]): Promise<number> {
     if (certs.length === 0) return 0;
 
-    const startId = await this.nextIdRange(certs.length);
     const now = Math.floor(Date.now() / 1000);
 
-    const docs: Omit<CertificateDocument, "_id">[] = certs.map((cert, i) => ({
-      numericId: startId + i,
+    const docs: Omit<CertificateDocument, "_id">[] = certs.map((cert) => ({
       fingerprint: cert.fingerprint,
       domains: cert.domains,
       domainCount: cert.domains.length,
@@ -192,15 +177,15 @@ export class MongoRepository implements CertificateRepository {
     }
   }
 
-  async getById(id: number): Promise<Certificate | null> {
-    const doc = await this.certs.findOne({ numericId: id });
+  async getByFingerprint(fingerprint: string): Promise<Certificate | null> {
+    const doc = await this.certs.findOne({ fingerprint });
     return doc ? docToCertificate(doc) : null;
   }
 
   async getRecent(limit: number): Promise<Certificate[]> {
     const docs = await this.certs
       .find()
-      .sort({ numericId: -1 })
+      .sort({ seenAt: -1 })
       .limit(limit)
       .maxTimeMS(5000)
       .toArray();
@@ -262,17 +247,19 @@ export class MongoRepository implements CertificateRepository {
     log.debug("Maintenance called (no-op for MongoDB)");
   }
 
-  async exportBatch(cursor: number | null, limit: number): Promise<ExportBatch> {
-    const filter = cursor !== null ? { numericId: { $gt: cursor } } : {};
+  async exportBatch(cursor: string | null, limit: number): Promise<ExportBatch> {
+    // Use _id (ObjectId) as cursor: ObjectIds embed a timestamp as the first 4 bytes,
+    // so they are monotonically increasing by insertion order. New inserts are never skipped.
+    const filter = cursor !== null ? { _id: { $gt: new ObjectId(cursor) } } : {};
 
     const docs = await this.certs
       .find(filter)
-      .sort({ numericId: 1 })
+      .sort({ _id: 1 })
       .limit(limit)
       .toArray();
 
     const certificates = docs.map(docToCertificate);
-    const nextCursor = docs.length < limit ? null : docs[docs.length - 1]!.numericId;
+    const nextCursor = docs.length < limit ? null : docs[docs.length - 1]!._id.toHexString();
 
     return { certificates, cursor: nextCursor };
   }

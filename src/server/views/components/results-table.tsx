@@ -46,7 +46,7 @@ export function ResultsTable({ certificates, total, page, totalPages, query }: {
             {certificates.map((cert) => (
               <tr class="border-b border-gray-800 hover:bg-gray-800/50">
                 <td class="py-2 pr-4">
-                  <a href={`/cert/${cert.id}`} class="text-green-400 hover:text-green-300">
+                  <a href={`/cert/${cert.fingerprint}`} class="text-green-400 hover:text-green-300">
                     {truncate(cert.domains[0] ?? "", 50)}
                   </a>
                   {cert.domainCount > 1 && (

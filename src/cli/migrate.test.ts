@@ -57,9 +57,8 @@ describe("migrate parseArgs", () => {
 });
 
 describe("certToNewCert", () => {
-  test("strips id, domainCount, and createdAt from Certificate", () => {
+  test("strips domainCount and createdAt from Certificate", () => {
     const cert: Certificate = {
-      id: 42,
       fingerprint: "abc",
       domains: ["a.com", "b.com"],
       domainCount: 2,
@@ -95,14 +94,12 @@ describe("certToNewCert", () => {
       seenAt: 3000,
     });
 
-    expect("id" in result).toBe(false);
     expect("domainCount" in result).toBe(false);
     expect("createdAt" in result).toBe(false);
   });
 
   test("preserves null fields", () => {
     const cert: Certificate = {
-      id: 1,
       fingerprint: "def",
       domains: [],
       domainCount: 0,
@@ -174,7 +171,7 @@ describe("migration data flow", () => {
     const certs = Array.from({ length: 7 }, () => makeCert());
     await sourceRepo.insertBatch(certs);
 
-    let cursor: number | null = null;
+    let cursor: string | null = null;
     let totalMigrated = 0;
     let batchCount = 0;
 
