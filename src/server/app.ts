@@ -10,6 +10,7 @@ import { cachedFn } from "../utils/cache.ts";
 import { apiRoutes } from "./routes/api.ts";
 import { uiRoutes } from "./routes/ui.tsx";
 import { getLogger } from "../utils/logger.ts";
+import { logo } from "./logo.ts";
 
 const log = getLogger(["aletheia", "server"]);
 
@@ -54,6 +55,12 @@ export function createApp(deps: AppDeps) {
     c.set("getStats", getStats);
     c.set("certEvents", certEvents);
     await next();
+  });
+
+  app.get("/logo.png", () => {
+    return new Response(logo, {
+      headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=31536000" },
+    });
   });
 
   app.get("/health", (c) => {

@@ -1,2 +1,5 @@
+[loader]
+".png" = "base64"
+
 [test]
 preload = ["./src/test-setup.ts"]

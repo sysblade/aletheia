@@ -1,7 +1,7 @@
 import type { Child } from "hono/jsx";
 
 export function Layout({ title, children }: { title?: string; children: Child }) {
-  const pageTitle = title ? `${title} - CT Log` : "CT Log - Certificate Transparency Monitor";
+  const pageTitle = title ? `${title} - Aletheia` : "Aletheia - Certificate Transparency Monitor";
 
   return (
     <html lang="en">
@@ -21,8 +21,9 @@ export function Layout({ title, children }: { title?: string; children: Child })
       <body class="bg-gray-900 text-gray-100 min-h-screen">
         <nav class="bg-gray-800 border-b border-gray-700 px-6 py-3">
           <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <a href="/" class="text-xl font-bold text-green-400 hover:text-green-300">
-              CT Log
+            <a href="/" class="flex items-center space-x-2 hover:opacity-80">
+              <img src="/logo.png" alt="Aletheia" class="h-8 w-8" />
+              <span class="text-xl font-bold text-green-400">Aletheia</span>
             </a>
             <div class="flex items-center space-x-4 text-sm text-gray-400">
               <a href="/" class="hover:text-gray-200">Home</a>
