@@ -11,7 +11,18 @@ RUN bun install --frozen-lockfile
 
 # Copy source and compile to a self-contained binary
 COPY . .
-RUN bun run compile
+
+# GIT_COMMIT is passed at build time (e.g. --build-arg GIT_COMMIT=$(git rev-parse --short HEAD))
+ARG GIT_COMMIT=dev
+
+RUN bun build src/index.ts \
+    --compile \
+    --bytecode \
+    --sourcemap \
+    --minify \
+    --target=bun-linux-x64 \
+    --define "GIT_COMMIT=\"${GIT_COMMIT}\"" \
+    --outfile out/aletheia
 
 # ── Production stage ──────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runner

@@ -66,6 +66,7 @@ export function createApp(deps: AppDeps) {
     const m = metrics.snapshot();
     return c.json({
       status: "ok",
+      version: typeof GIT_COMMIT !== "undefined" ? GIT_COMMIT : "dev",
       uptimeSeconds: Math.floor((Date.now() - m.startedAt) / 1000),
       certsInserted: m.certsInserted,
       bufferPending: metrics.bufferPending(),

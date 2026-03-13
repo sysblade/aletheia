@@ -11,7 +11,10 @@ services:
 
   # ── Aletheia ────────────────────────────────────────────────────────────────
   aletheia:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-dev}
     image: aletheia:local
     ports:
       - "${PORT:-3000}:3000"

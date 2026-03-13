@@ -8,7 +8,8 @@
     "start": "bun run src/index.ts serve",
     "check": "bun x tsc --noEmit",
     "test": "bun test",
-    "compile": "bun build src/index.ts --compile --outfile out/aletheia",
+    "compile": "bun build src/index.ts --compile --bytecode --sourcemap --minify --target=bun-linux-x64 --outfile out/aletheia",
+    "compile:smol": "bun build src/index.ts --compile --bytecode --sourcemap --minify --target=bun-linux-x64 --compile-exec-argv=\"--smol\" --outfile out/aletheia",
     "clean": "rm -rf out/"
   },
   "dependencies": {

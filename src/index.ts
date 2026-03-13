@@ -101,4 +101,6 @@ Examples:
   });
 
 // Parse command line arguments
-await program.parseAsync(process.argv);
+void (async () => {
+  await program.parseAsync(process.argv);
+})();
