@@ -1,5 +1,9 @@
+/** Searchable columns for column-scoped queries (e.g., domain:example.com). */
 export type SearchColumn = "domain" | "issuer" | "cn";
 
+/**
+ * Individual search term with optional column scope and negation.
+ */
 export interface SearchTerm {
   text: string;
   column: SearchColumn | null;
@@ -44,6 +48,11 @@ function parseGroup(segment: string): SearchTerm[] {
     });
 }
 
+/**
+ * Parse search query string into structured query AST.
+ * Supports OR groups, column prefixes (domain:, issuer:, cn:), and negation (-term).
+ * Example: "domain:example.com -test OR issuer:letsencrypt"
+ */
 export function parseSearchQuery(raw: string): ParsedQuery {
   const groups = raw
     .trim()

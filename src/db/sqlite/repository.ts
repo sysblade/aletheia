@@ -42,6 +42,10 @@ function rowToCertificate(row: CertificateRow): Certificate {
   };
 }
 
+/**
+ * SQLite-based certificate repository implementation.
+ * Uses FTS5 for full-text search and WAL mode for concurrent access.
+ */
 export class SqliteRepository implements CertificateRepository {
   constructor(private db: Kysely<Database>) {}
 
@@ -212,6 +216,32 @@ export class SqliteRepository implements CertificateRepository {
     }
 
     return deleted;
+  }
+
+  async maintenance(): Promise<void> {
+    log.info("Starting database maintenance");
+
+    // Update query planner statistics
+    await sql`PRAGMA optimize`.execute(this.db);
+
+    // Full statistics analysis with reasonable limit
+    await sql`PRAGMA analysis_limit = 1000`.execute(this.db);
+    await sql`ANALYZE`.execute(this.db);
+
+    // Checkpoint WAL without blocking
+    const result = await sql<{ busy: number; log: number; checkpointed: number }>`
+      PRAGMA wal_checkpoint(PASSIVE)
+    `.execute(this.db);
+
+    const row = result.rows[0];
+    if (row) {
+      log.info("Maintenance completed: WAL checkpointed {checkpointed} frames, {log} frames remain", {
+        checkpointed: row.checkpointed,
+        log: row.log,
+      });
+    } else {
+      log.info("Maintenance completed");
+    }
   }
 
   async exportBatch(cursor: number | null, limit: number): Promise<ExportBatch> {

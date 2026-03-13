@@ -11,6 +11,10 @@ const log = getLogger(["ctlog", "migrate"]);
 const VALID_STORES: StoreType[] = ["sqlite", "mongodb"];
 const CURSOR_FILE = "./data/.migrate-cursor";
 
+/**
+ * Convert Certificate (with DB fields) to NewCertificate (for insertion).
+ * Used during migration to strip database-generated fields.
+ */
 export function certToNewCert(cert: Certificate): NewCertificate {
   return {
     fingerprint: cert.fingerprint,
@@ -29,6 +33,10 @@ export function certToNewCert(cert: Certificate): NewCertificate {
   };
 }
 
+/**
+ * Parse CLI arguments for migrate command.
+ * Validates source/target stores and batch size.
+ */
 export function parseArgs(args: string[]): { source: StoreType; target: StoreType; batchSize: number } {
   let source: string | undefined;
   let target: string | undefined;
@@ -85,6 +93,10 @@ async function removeCursor(): Promise<void> {
   } catch {}
 }
 
+/**
+ * Database migration command for copying certificates between storage backends.
+ * Supports resumable migration via cursor file for safe large-scale migrations.
+ */
 export const migrateCommand: CliCommand = {
   name: "migrate",
   description: "Migrate data between stores",

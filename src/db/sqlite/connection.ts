@@ -6,6 +6,10 @@ import { getLogger } from "../../utils/logger.ts";
 
 const log = getLogger(["ctlog", "sqlite"]);
 
+/**
+ * Create and configure SQLite database connection with optimized pragmas.
+ * Enables WAL mode, sets cache size, and configures for append-heavy workloads.
+ */
 export function createDatabase(path: string): Kysely<Database> {
   log.info("Opening database at {path}", { path });
 

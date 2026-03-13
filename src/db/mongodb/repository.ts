@@ -34,6 +34,10 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * MongoDB-based certificate repository implementation.
+ * Uses regex-based search and atomic counter for numeric IDs.
+ */
 export class MongoRepository implements CertificateRepository {
   private certs: Collection<CertificateDocument>;
   private counters: Collection<CounterDocument>;
@@ -211,6 +215,12 @@ export class MongoRepository implements CertificateRepository {
     }
 
     return deleted;
+  }
+
+  async maintenance(): Promise<void> {
+    // MongoDB handles most maintenance automatically
+    // No manual optimization needed for most deployments
+    log.debug("Maintenance called (no-op for MongoDB)");
   }
 
   async exportBatch(cursor: number | null, limit: number): Promise<ExportBatch> {

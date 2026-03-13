@@ -1,8 +1,13 @@
 import type { Config } from "../config.ts";
 import type { CertificateRepository } from "./repository.ts";
 
+/** Supported storage backend types. Configured via STORE_TYPE environment variable. */
 export type StoreType = "sqlite" | "mongodb";
 
+/**
+ * Factory function to create a certificate repository based on storage type.
+ * Handles database connection, schema migration (SQLite), and returns configured repository.
+ */
 export async function createRepository(storeType: StoreType, cfg: Config): Promise<CertificateRepository> {
   switch (storeType) {
     case "sqlite": {

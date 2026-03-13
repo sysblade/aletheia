@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../app.ts";
 
+/** JSON API routes for certificate search, retrieval, and statistics. */
 export const apiRoutes = new Hono<AppEnv>();
 
 apiRoutes.get("/search", async (c) => {

@@ -1,6 +1,10 @@
 import type { CertStreamMessage } from "../types/certstream.ts";
 import type { NewCertificate } from "../types/certificate.ts";
 
+/**
+ * Parse CertStream WebSocket message into normalized certificate format.
+ * Returns null for invalid JSON, heartbeats, or certificates without domains.
+ */
 export function parseCertStreamMessage(raw: string): NewCertificate | null {
   let msg: CertStreamMessage;
   try {

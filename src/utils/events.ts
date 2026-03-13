@@ -1,5 +1,9 @@
 type Listener<T> = (data: T) => void;
 
+/**
+ * Simple synchronous event bus for pub/sub communication.
+ * Used for live certificate stream updates to SSE clients.
+ */
 export class EventBus<T> {
   private listeners = new Set<Listener<T>>();
 

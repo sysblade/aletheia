@@ -8,7 +8,8 @@
     "start": "bun run src/index.ts serve",
     "check": "bun x tsc --noEmit",
     "test": "bun test",
-    "compile": "bun build src/index.ts --compile --outfile out/ctlog"
+    "compile": "bun build src/index.ts --compile --outfile out/ctlog",
+    "clean": "rm -rf out/"
   },
   "dependencies": {
     "hono": "^4.7.0",

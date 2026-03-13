@@ -174,6 +174,7 @@ describe("API routes", () => {
         getRecent: (l) => repo.getRecent(l),
         getStats: () => repo.getStats(),
         cleanup: (d) => repo.cleanup(d),
+        maintenance: () => repo.maintenance(),
         exportBatch: (cursor, limit) => repo.exportBatch(cursor, limit),
         close: () => repo.close(),
         search: () => Promise.reject(new SearchError("test search error")),

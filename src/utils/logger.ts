@@ -11,6 +11,10 @@ function resolveLogLevel(): LogLevel {
   return "info";
 }
 
+/**
+ * Configure LogTape logging with console sink and LOG_LEVEL environment variable.
+ * Must be called once at application startup before any logging occurs.
+ */
 export async function configureLogging(): Promise<void> {
   const level = resolveLogLevel();
   await configure({

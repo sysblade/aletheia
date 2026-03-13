@@ -3,6 +3,10 @@ import { getLogger } from "../utils/logger.ts";
 
 const log = getLogger(["ctlog", "buffer"]);
 
+/**
+ * Batching buffer for certificates with size and time-based flushing.
+ * Re-queues failed batches to prevent data loss during transient failures.
+ */
 export class BatchBuffer {
   private items: NewCertificate[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;

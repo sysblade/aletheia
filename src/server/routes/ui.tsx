@@ -9,6 +9,7 @@ import { Layout } from "../views/layout.tsx";
 
 const LIVE_STREAM_LIMIT = 25;
 
+/** Server-rendered UI routes using HTMX and JSX templates. */
 export const uiRoutes = new Hono<AppEnv>();
 
 uiRoutes.get("/", async (c) => {

@@ -6,6 +6,10 @@ import { getLogger } from "../utils/logger.ts";
 
 const log = getLogger(["ctlog", "writer"]);
 
+/**
+ * Writes certificate batches to repository and updates metrics.
+ * Emits certificate events for live stream updates.
+ */
 export class BatchWriter {
   constructor(
     private repository: CertificateRepository,

@@ -11,6 +11,10 @@ import * as m006 from "./migrations/006_add_not_after_index.ts";
 
 const log = getLogger(["ctlog", "migrate"]);
 
+/**
+ * Migration provider that loads migrations from static imports.
+ * Avoids dynamic file system access for compatibility with bundled/compiled mode.
+ */
 class StaticMigrationProvider implements MigrationProvider {
   async getMigrations(): Promise<Record<string, Migration>> {
     return {
@@ -24,6 +28,10 @@ class StaticMigrationProvider implements MigrationProvider {
   }
 }
 
+/**
+ * Run all pending database migrations to latest version.
+ * Logs migration results and throws on error.
+ */
 export async function runMigrations(db: Kysely<Database>): Promise<void> {
   const migrator = new Migrator({
     db,

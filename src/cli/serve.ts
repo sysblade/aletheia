@@ -11,6 +11,10 @@ import { EventBus } from "../utils/events.ts";
 import type { NewCertificate } from "../types/certificate.ts";
 import type { WorkerMessage, MainMessage } from "../ingestor/messages.ts";
 
+/**
+ * Main serve command that starts the CT Log monitor.
+ * Initializes database, spawns ingest worker, starts web server, and handles graceful shutdown.
+ */
 export const serveCommand: CliCommand = {
   name: "serve",
   description: "Start the CT Log monitor server (default)",
@@ -33,6 +37,32 @@ export const serveCommand: CliCommand = {
 
     // Detect if running from compiled binary
     const isCompiled = !Bun.main.endsWith(".ts");
+
+    // Helper function to spawn maintenance process
+    function spawnMaintenance(reason: string) {
+      const execPath = isCompiled ? process.execPath : "bun";
+      const args = isCompiled ? ["maintenance"] : ["run", "src/index.ts", "maintenance"];
+
+      log.info("Spawning database maintenance process ({reason})", { reason });
+
+      const maintenanceProc = Bun.spawn({
+        cmd: [execPath, ...args],
+        stdout: "inherit",
+        stderr: "inherit",
+        env: process.env,
+      });
+
+      maintenanceProc.exited.then((code) => {
+        if (code === 0) {
+          log.info("Database maintenance process completed successfully");
+        } else {
+          log.error("Database maintenance process exited with code {code}", { code });
+        }
+      });
+    }
+
+    // Run maintenance at startup
+    spawnMaintenance("startup");
     let worker: Worker | null = null;
     let workerProc: Subprocess | null = null;
 
@@ -116,6 +146,10 @@ export const serveCommand: CliCommand = {
       }
     }, 24 * 60 * 60 * 1000);
 
+    const maintenanceInterval = setInterval(() => {
+      spawnMaintenance("scheduled");
+    }, config.db.maintenanceIntervalHours * 60 * 60 * 1000);
+
     const server = Bun.serve({
       fetch: app.fetch,
       port: config.server.port,
@@ -157,6 +191,7 @@ export const serveCommand: CliCommand = {
       }
 
       clearInterval(cleanupInterval);
+      clearInterval(maintenanceInterval);
 
       server.stop();
       log.info("Server stopped");

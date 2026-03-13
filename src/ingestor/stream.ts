@@ -11,6 +11,10 @@ const MAX_BACKOFF_MS = 60_000;
 const INITIAL_BACKOFF_MS = 1_000;
 const PING_INTERVAL_MS = 30_000;
 
+/**
+ * WebSocket client for CertStream API with automatic reconnection and backoff.
+ * Parses incoming certificates, filters them, and buffers for batch writing.
+ */
 export class CertStreamClient {
   private ws: WebSocket | null = null;
   private backoff = INITIAL_BACKOFF_MS;

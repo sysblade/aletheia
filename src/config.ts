@@ -18,9 +18,13 @@ function parseList(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Application configuration loaded from environment variables.
+ * All settings have sensible defaults for development.
+ */
 export interface Config {
   store: { type: StoreType };
-  db: { path: string; retentionDays: number };
+  db: { path: string; retentionDays: number; maintenanceIntervalHours: number };
   mongo: { url: string; database: string };
   certstream: { url: string };
   batch: { size: number; intervalMs: number };
@@ -28,6 +32,10 @@ export interface Config {
   filters: { domains: string[]; issuers: string[] };
 }
 
+/**
+ * Load configuration from environment variables with validation and defaults.
+ * Throws on invalid STORE_TYPE. Safe to call multiple times.
+ */
 export function loadConfig(): Config {
   return {
     store: {
@@ -36,6 +44,7 @@ export function loadConfig(): Config {
     db: {
       path: process.env.DB_PATH || "./data/ctlog.sqlite",
       retentionDays: Number(process.env.DB_RETENTION_DAYS) || 90,
+      maintenanceIntervalHours: Number(process.env.DB_MAINTENANCE_INTERVAL_HOURS) || 6,
     },
     mongo: {
       url: process.env.MONGO_URL || "mongodb://localhost:27017",

@@ -1,5 +1,9 @@
 import type { Generated, Insertable, Selectable, ColumnType } from "kysely";
 
+/**
+ * Main certificates table schema.
+ * Stores certificate metadata with JSON-encoded domains array.
+ */
 export interface CertificatesTable {
   id: Generated<number>;
   fingerprint: string;
@@ -19,16 +23,24 @@ export interface CertificatesTable {
   created_at: ColumnType<number, number | undefined, never>;
 }
 
+/**
+ * FTS5 virtual table for full-text search on certificates.
+ * Synchronized with certificates table via triggers.
+ */
 export interface CertificatesFtsTable {
   domains: string;
   issuer_org: string;
   subject_cn: string;
 }
 
+/** Kysely database schema definition. */
 export interface Database {
   certificates: CertificatesTable;
   certificates_fts: CertificatesFtsTable;
 }
 
+/** Certificate row as selected from database. */
 export type CertificateRow = Selectable<CertificatesTable>;
+
+/** Certificate row for insertion (omits generated fields). */
 export type NewCertificateRow = Insertable<CertificatesTable>;

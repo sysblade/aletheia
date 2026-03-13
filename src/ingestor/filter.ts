@@ -8,6 +8,10 @@ function globToRegex(pattern: string): RegExp {
   return new RegExp(`^${escaped}$`, "i");
 }
 
+/**
+ * Certificate filter supporting domain glob patterns and issuer substring matching.
+ * In firehose mode (no filters), all certificates pass through.
+ */
 export class CertFilter {
   private domainPatterns: RegExp[];
   private issuerSubstrings: string[];

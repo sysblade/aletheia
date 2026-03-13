@@ -13,6 +13,7 @@ import { getLogger } from "../utils/logger.ts";
 
 const log = getLogger(["ctlog", "server"]);
 
+/** Hono environment type defining context variables available in all routes. */
 export type AppEnv = {
   Variables: {
     repository: CertificateRepository;
@@ -24,6 +25,7 @@ export type AppEnv = {
   };
 };
 
+/** Dependencies injected into the Hono app at creation time. */
 export interface AppDeps {
   repository: CertificateRepository;
   metrics: MetricsReader;
@@ -32,6 +34,10 @@ export interface AppDeps {
   certEvents: EventBus<NewCertificate[]>;
 }
 
+/**
+ * Create configured Hono app with routes, middleware, and error handling.
+ * Sets up dependency injection via context variables.
+ */
 export function createApp(deps: AppDeps) {
   const { repository, metrics, config, filter, certEvents } = deps;
   const getStats = cachedFn(() => repository.getStats(), 10_000);

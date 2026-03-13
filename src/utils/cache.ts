@@ -1,3 +1,7 @@
+/**
+ * Wrap an async function with time-based caching.
+ * Subsequent calls within TTL return cached value without re-executing function.
+ */
 export function cachedFn<T>(fn: () => Promise<T>, ttlMs: number): () => Promise<T> {
   let cached: T;
   let populated = false;

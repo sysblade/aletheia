@@ -1,3 +1,7 @@
+/**
+ * Stored certificate record with database ID and timestamps.
+ * Represents a certificate that has been persisted to the repository.
+ */
 export interface Certificate {
   id: number;
   fingerprint: string;
@@ -17,6 +21,10 @@ export interface Certificate {
   createdAt: number;
 }
 
+/**
+ * Certificate data for insertion into the repository.
+ * Does not include database-generated fields (id, createdAt).
+ */
 export interface NewCertificate {
   fingerprint: string;
   domains: string[];
@@ -33,11 +41,17 @@ export interface NewCertificate {
   seenAt: number;
 }
 
+/**
+ * Pagination options for certificate search queries.
+ */
 export interface SearchOpts {
   page: number;
   limit: number;
 }
 
+/**
+ * Paginated search results containing matching certificates and pagination metadata.
+ */
 export interface SearchResult {
   certificates: Certificate[];
   total: number;
@@ -46,6 +60,9 @@ export interface SearchResult {
   totalPages: number;
 }
 
+/**
+ * Aggregate statistics about stored certificates.
+ */
 export interface Stats {
   totalCertificates: number;
   uniqueIssuers: number;
@@ -53,6 +70,10 @@ export interface Stats {
   oldestSeenAt: number | null;
 }
 
+/**
+ * Batch of certificates for export with cursor-based pagination.
+ * Cursor is null when no more certificates remain.
+ */
 export interface ExportBatch {
   certificates: Certificate[];
   cursor: number | null;

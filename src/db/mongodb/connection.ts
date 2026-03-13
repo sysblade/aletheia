@@ -4,6 +4,10 @@ import { getLogger } from "../../utils/logger.ts";
 
 const log = getLogger(["ctlog", "mongodb"]);
 
+/**
+ * Connect to MongoDB and ensure indexes and counters are initialized.
+ * Drops obsolete indexes and creates optimized index set.
+ */
 export async function connectMongo(url: string, database: string): Promise<Db> {
   const redactedUrl = url.replace(/:\/\/[^@]*@/, "://***@");
   log.info("Connecting to MongoDB at {url}, database {database}", { url: redactedUrl, database });

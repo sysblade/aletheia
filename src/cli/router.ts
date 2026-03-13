@@ -2,6 +2,9 @@ import { getLogger } from "../utils/logger.ts";
 
 const log = getLogger(["ctlog", "cli"]);
 
+/**
+ * CLI command interface. Each command exports an object implementing this interface.
+ */
 export interface CliCommand {
   name: string;
   description: string;
@@ -17,6 +20,10 @@ function printUsage(commands: Map<string, CliCommand>): void {
   console.log(`\n  --help       Show this help message`);
 }
 
+/**
+ * Run CLI with registered commands. Defaults to 'serve' if no command specified.
+ * Handles --help flag and unknown commands.
+ */
 export async function runCli(commands: Map<string, CliCommand>): Promise<void> {
   const args = process.argv.slice(2);
   const commandName = args[0];

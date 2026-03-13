@@ -8,6 +8,10 @@ import { BatchBuffer } from "../ingestor/buffer.ts";
 import { BatchWriter } from "../ingestor/writer.ts";
 import { MetricsCollector } from "../utils/metrics.ts";
 
+/**
+ * Worker command for running ingest pipeline in compiled mode.
+ * Spawned as subprocess by serve command when running from compiled binary.
+ */
 export const workerCommand: CliCommand = {
   name: "worker",
   description: "Run the ingestor worker (internal use for compiled mode)",

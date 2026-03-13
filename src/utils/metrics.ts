@@ -1,3 +1,4 @@
+/** Core ingestion metrics counters and timestamps. */
 export interface Metrics {
   certsReceived: number;
   certsFiltered: number;
@@ -9,11 +10,13 @@ export interface Metrics {
   startedAt: number;
 }
 
+/** Metrics snapshot with derived values (rate, buffer size). */
 export interface MetricsSnapshot extends Metrics {
   insertRate: number;
   bufferPending: number;
 }
 
+/** Read-only metrics interface for exposing metrics to web server. */
 export interface MetricsReader {
   snapshot(): Readonly<Metrics>;
   insertRate(): number;
@@ -35,6 +38,10 @@ function zeroMetrics(): Metrics {
   };
 }
 
+/**
+ * Metrics collector for ingest worker with rolling window insert rate calculation.
+ * Used by the worker thread/process to track ingestion performance.
+ */
 export class MetricsCollector implements MetricsReader {
   private data: Metrics = zeroMetrics();
   private insertWindow: { time: number; count: number }[] = [];
@@ -80,6 +87,10 @@ export class MetricsCollector implements MetricsReader {
   }
 }
 
+/**
+ * Metrics store for main thread that receives snapshots from worker.
+ * Used by web server to display metrics without direct worker access.
+ */
 export class MetricsStore implements MetricsReader {
   private data: Metrics = zeroMetrics();
   private rate = 0;
