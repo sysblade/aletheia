@@ -11,6 +11,9 @@ function makeRepo(overrides?: Partial<CertificateRepository>): CertificateReposi
     getById: mock(() => Promise.resolve(null)),
     getRecent: mock(() => Promise.resolve([])),
     getStats: mock(() => Promise.resolve({ totalCertificates: 0, uniqueIssuers: 0, latestSeenAt: null, oldestSeenAt: null })),
+    getHourlyStats: mock(() => Promise.resolve([])),
+    getDailyStats: mock(() => Promise.resolve([])),
+    computeStatsForPeriod: mock(() => Promise.resolve()),
     cleanup: mock(() => Promise.resolve(0)),
     maintenance: mock(() => Promise.resolve()),
     exportBatch: mock(() => Promise.resolve({ certificates: [], cursor: null })),
@@ -53,6 +56,6 @@ describe("BatchWriter", () => {
     const metrics = new MetricsCollector();
     const writer = new BatchWriter(repo, metrics);
 
-    expect(writer.write([makeCert()])).rejects.toThrow("db error");
+    await expect(writer.write([makeCert()])).rejects.toThrow("db error");
   });
 });

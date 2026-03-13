@@ -202,6 +202,7 @@ export class MongoRepository implements CertificateRepository {
       .find()
       .sort({ numericId: -1 })
       .limit(limit)
+      .maxTimeMS(5000)
       .toArray();
     return docs.map(docToCertificate);
   }

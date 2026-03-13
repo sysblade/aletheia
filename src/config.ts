@@ -25,7 +25,13 @@ function parseList(value: string | undefined): string[] {
 export interface Config {
   store: { type: StoreType };
   db: { path: string; retentionDays: number; maintenanceIntervalHours: number };
-  mongo: { url: string; database: string };
+  mongo: {
+    url: string;
+    database: string;
+    socketTimeoutMs: number;
+    maxPoolSize: number;
+    minPoolSize: number;
+  };
   certstream: { url: string };
   batch: { size: number; intervalMs: number; maxQueueSize: number };
   server: { port: number; host: string };
@@ -50,6 +56,9 @@ export function loadConfig(): Config {
     mongo: {
       url: process.env.MONGO_URL || "mongodb://localhost:27017",
       database: process.env.MONGO_DATABASE || "ctlog",
+      socketTimeoutMs: Number(process.env.MONGO_SOCKET_TIMEOUT_MS) || 15000,
+      maxPoolSize: Number(process.env.MONGO_MAX_POOL_SIZE) || 10,
+      minPoolSize: Number(process.env.MONGO_MIN_POOL_SIZE) || 2,
     },
     certstream: {
       url: process.env.CERTSTREAM_URL || "wss://api.certstream.dev/",

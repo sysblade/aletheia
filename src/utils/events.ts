@@ -1,4 +1,8 @@
+import { getLogger } from "./logger.ts";
+
 type Listener<T> = (data: T) => void;
+
+const log = getLogger(["ctlog", "events"]);
 
 /**
  * Simple synchronous event bus for pub/sub communication.
@@ -16,7 +20,9 @@ export class EventBus<T> {
 
   emit(data: T): void {
     for (const listener of this.listeners) {
-      listener(data);
+      Promise.resolve(listener(data)).catch((err) => {
+        log.error("EventBus listener error: {error}", { error: String(err) });
+      });
     }
   }
 }

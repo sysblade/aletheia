@@ -25,7 +25,10 @@
     // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
+    "noPropertyAccessFromIndexSignature": false,
+
+    // Explicitly exclude deprecated @types packages
+    "types": ["bun", "ws"]
   },
   "include": ["src"]
 }

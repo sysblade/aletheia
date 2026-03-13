@@ -2,8 +2,6 @@ import { Kysely } from "kysely";
 import { BunSqliteDialect } from "kysely-bun-sqlite";
 import { Database as BunDatabase } from "bun:sqlite";
 import type { Database } from "./db/sqlite/schema.ts";
-import { runMigrations } from "./db/sqlite/migrate.ts";
-import { SqliteRepository } from "./db/sqlite/repository.ts";
 import type { NewCertificate } from "./types/certificate.ts";
 
 let counter = 0;
@@ -57,6 +55,10 @@ export function makeCertStreamJson(overrides?: Record<string, unknown>): string 
 }
 
 export async function createTestDb() {
+  // Lazy import to avoid loading heavy dependencies during test setup
+  const { runMigrations } = await import("./db/sqlite/migrate.ts");
+  const { SqliteRepository } = await import("./db/sqlite/repository.ts");
+
   const sqlite = new BunDatabase(":memory:");
   const db = new Kysely<Database>({
     dialect: new BunSqliteDialect({ database: sqlite }),

@@ -1,4 +1,4 @@
-import psl from "psl";
+import { parse as pslParse } from "psl";
 
 /**
  * Extract 2-level domain (eTLD+1) from FQDN using public suffix list.
@@ -32,11 +32,16 @@ export function extractTwoLevelDomain(fqdn: string): string | null {
     return null;
   }
 
+  // Reject IP addresses (IPv4 pattern)
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(domain)) {
+    return null;
+  }
+
   // Use psl library to extract registrable domain (eTLD+1)
-  const parsed = psl.parse(domain);
+  const parsed = pslParse(domain);
 
   // psl.parse returns error for invalid domains
-  if (parsed.error) {
+  if ("error" in parsed) {
     return null;
   }
 

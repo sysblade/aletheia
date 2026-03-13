@@ -10,3 +10,27 @@ export interface CliCommand {
   description: string;
   run(args: string[]): Promise<void>;
 }
+
+/**
+ * Run CLI router based on process.argv.
+ *
+ * @deprecated This function is kept for backward compatibility with tests.
+ * The actual CLI uses commander.js in src/index.ts.
+ */
+export async function runCli(commands: Map<string, CliCommand>): Promise<void> {
+  const args = process.argv.slice(2);
+  const commandName = args[0] || "serve";
+
+  if (commandName === "--help" || commandName === "-h") {
+    return;
+  }
+
+  const command = commands.get(commandName);
+  if (!command) {
+    console.error(`Unknown command: ${commandName}`);
+    process.exit(1);
+  }
+
+  const commandArgs = args.slice(1);
+  await command.run(commandArgs);
+}

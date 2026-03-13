@@ -8,8 +8,11 @@ import { LiveStreamRows, LiveStreamTable } from "../views/components/live-stream
 import { Layout } from "../views/layout.tsx";
 import { StatsPage, StatsContent } from "../views/stats/stats-page.tsx";
 import type { TopEntry } from "../../types/certificate.ts";
+import { getLogger } from "../../utils/logger.ts";
 
 const LIVE_STREAM_LIMIT = 25;
+
+const log = getLogger(["ctlog", "server", "sse"]);
 
 /** Server-rendered UI routes using HTMX and JSX templates. */
 export const uiRoutes = new Hono<AppEnv>();
@@ -156,7 +159,11 @@ uiRoutes.get("/events/live-stream", async (c) => {
         const recent = await repo.getRecent(LIVE_STREAM_LIMIT);
         const html = (<LiveStreamRows certificates={recent} />).toString();
         await stream.writeSSE({ data: html, event: "certificates" });
-      } catch {}
+      } catch (err) {
+        log.error("SSE stream update failed: {error}", { error: String(err) });
+        aborted = true;
+        unsubscribe();
+      }
     });
 
     stream.onAbort(() => {
@@ -164,8 +171,22 @@ uiRoutes.get("/events/live-stream", async (c) => {
       unsubscribe();
     });
 
+    let heartbeatCount = 0;
     while (!aborted) {
       await stream.sleep(30_000);
+
+      heartbeatCount++;
+      try {
+        await stream.writeSSE({
+          data: `keepalive ${heartbeatCount}`,
+          event: "heartbeat",
+        });
+      } catch (err) {
+        log.warn("SSE heartbeat failed, closing stream: {error}", {
+          error: String(err),
+        });
+        aborted = true;
+      }
     }
   });
 });

@@ -6,7 +6,6 @@ import type { SearchTerm } from "../search-query.ts";
 import type { Certificate, DailyStats, ExportBatch, HourlyStats, NewCertificate, SearchOpts, SearchResult, Stats, TopEntry } from "../../types/certificate.ts";
 import type { Database, CertificateRow, DailyStatsRow, HourlyStatsRow } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
-import { extractTwoLevelDomain, isWildcardDomain } from "../../utils/domain.ts";
 
 const log = getLogger(["ctlog", "sqlite", "repository"]);
 
@@ -331,6 +330,9 @@ export class SqliteRepository implements CertificateRepository {
   }
 
   async computeStatsForPeriod(periodStart: number, granularity: "hourly" | "daily"): Promise<void> {
+    // Lazy import domain utilities to avoid loading psl during module initialization
+    const { extractTwoLevelDomain, isWildcardDomain } = await import("../../utils/domain.ts");
+
     const periodEnd = periodStart + (granularity === "hourly" ? 3600 : 86400);
 
     log.debug("Computing {granularity} stats for period {start} to {end}", {

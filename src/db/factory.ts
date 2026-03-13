@@ -21,7 +21,7 @@ export async function createRepository(storeType: StoreType, cfg: Config): Promi
     case "mongodb": {
       const { connectMongo } = await import("./mongodb/connection.ts");
       const { MongoRepository } = await import("./mongodb/repository.ts");
-      const db = await connectMongo(cfg.mongo.url, cfg.mongo.database);
+      const db = await connectMongo(cfg.mongo);
       return new MongoRepository(db);
     }
     default:

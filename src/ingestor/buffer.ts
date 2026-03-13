@@ -13,6 +13,7 @@ export class BatchBuffer {
   private queue: PQueue;
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastQueueWarning = 0;
+  private flushing = false;
 
   constructor(
     private maxSize: number,
@@ -22,8 +23,6 @@ export class BatchBuffer {
   ) {
     this.queue = new PQueue({
       concurrency: 1, // Sequential writes - one batch at a time
-      queueSize: maxQueueSize,
-      throwOnTimeout: false,
     });
 
     // Monitor queue size and warn when getting full
@@ -67,22 +66,30 @@ export class BatchBuffer {
   async flush(): Promise<void> {
     if (this.items.length === 0) return;
 
+    // Guard: prevent concurrent flushes
+    if (this.flushing) return;
+
+    this.flushing = true;
     const batch = this.items;
     this.items = [];
 
-    // Add batch to queue - p-queue handles backpressure automatically
-    void this.queue.add(async () => {
-      try {
-        await this.flushCallback(batch);
-      } catch (err) {
-        log.error("Batch write failed, re-queuing {batchSize} items: {error}", {
-          error: String(err),
-          batchSize: batch.length,
-        });
-        // Re-queue failed batch by adding back to items at front
-        this.items = batch.concat(this.items);
-      }
-    });
+    try {
+      // Add batch to queue and wait for it to process
+      await this.queue.add(async () => {
+        try {
+          await this.flushCallback(batch);
+        } catch (err) {
+          log.error("Batch write failed, re-queuing {batchSize} items: {error}", {
+            error: String(err),
+            batchSize: batch.length,
+          });
+          // Re-queue failed batch by adding back to items at front
+          this.items = batch.concat(this.items);
+        }
+      });
+    } finally {
+      this.flushing = false;
+    }
   }
 
   get pending(): number {

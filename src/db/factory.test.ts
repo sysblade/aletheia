@@ -4,12 +4,19 @@ import type { Config } from "../config.ts";
 
 const testConfig = {
   store: { type: "sqlite" as StoreType },
-  db: { path: ":memory:", retentionDays: 90 },
-  mongo: { url: "mongodb://localhost:27017", database: "ctlog_test" },
+  db: { path: ":memory:", retentionDays: 90, maintenanceIntervalHours: 6 },
+  mongo: {
+    url: "mongodb://localhost:27017",
+    database: "ctlog_test",
+    socketTimeoutMs: 15000,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+  },
   certstream: { url: "wss://api.certstream.dev/" },
-  batch: { size: 500, intervalMs: 3000 },
+  batch: { size: 500, intervalMs: 3000, maxQueueSize: 50 },
   server: { port: 3000, host: "0.0.0.0" },
   filters: { domains: [] as string[], issuers: [] as string[] },
+  stats: { enabled: true, hourlySchedule: "5 * * * *", dailySchedule: "5 0 * * *" },
 } as Config;
 
 describe("createRepository", () => {
