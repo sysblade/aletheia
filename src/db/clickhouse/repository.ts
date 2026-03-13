@@ -20,6 +20,11 @@ import { extractTwoLevelDomain, isWildcardDomain } from "../../utils/domain.ts";
 const log = getLogger(["aletheia", "clickhouse", "repository"]);
 
 const DOMAIN_BATCH_SIZE = 5000;
+// ClickHouse HTTP server rejects requests exceeding http_max_field_value_size.
+// Certificates with many SANs can produce very large JSON payloads, so we
+// split inserts and dedup lookups into chunks small enough to stay under the limit.
+const INSERT_CHUNK_SIZE = 50;
+const DEDUP_CHUNK_SIZE = 200;
 
 function rowToCertificate(row: CertificateRow): Certificate {
   return {
@@ -79,17 +84,30 @@ export class ClickHouseRepository implements CertificateRepository {
   async insertBatch(certs: NewCertificate[]): Promise<number> {
     if (certs.length === 0) return 0;
 
-    // Pre-filter duplicates: ReplacingMergeTree deduplicates in the background,
-    // but we want an accurate inserted count and avoid unnecessary writes.
+    // Split into chunks to stay under ClickHouse's http_max_field_value_size.
+    // Certs with many SANs can produce large payloads; chunking avoids HTTP 413.
+    if (certs.length > INSERT_CHUNK_SIZE) {
+      let total = 0;
+      for (let i = 0; i < certs.length; i += INSERT_CHUNK_SIZE) {
+        total += await this.insertBatch(certs.slice(i, i + INSERT_CHUNK_SIZE));
+      }
+      return total;
+    }
+
+    // Pre-filter duplicates across chunked dedup lookups.
     const fingerprints = certs.map((c) => c.fingerprint);
-    const existingResult = await this.client.query({
-      query: `SELECT fingerprint FROM certificates WHERE fingerprint IN {fps:Array(String)}`,
-      query_params: { fps: fingerprints },
-      format: "JSONEachRow",
-    });
-    const existing = new Set(
-      (await existingResult.json<{ fingerprint: string }>()).map((r) => r.fingerprint),
-    );
+    const existing = new Set<string>();
+    for (let i = 0; i < fingerprints.length; i += DEDUP_CHUNK_SIZE) {
+      const chunk = fingerprints.slice(i, i + DEDUP_CHUNK_SIZE);
+      const result = await this.client.query({
+        query: `SELECT fingerprint FROM certificates WHERE fingerprint IN {fps:Array(String)}`,
+        query_params: { fps: chunk },
+        format: "JSONEachRow",
+      });
+      for (const r of await result.json<{ fingerprint: string }>()) {
+        existing.add(r.fingerprint);
+      }
+    }
 
     const newCerts = certs.filter((c) => !existing.has(c.fingerprint));
     if (newCerts.length === 0) return 0;
