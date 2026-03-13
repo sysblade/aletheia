@@ -24,8 +24,8 @@ export async function configureLogging(): Promise<void> {
         sinks: ["console"],
       },
       {
-        category: "logtape",
-        lowestLevel: "error",
+        category: ["logtape", "meta"],
+        lowestLevel: "warning",
         sinks: ["console"],
       },
     ],
