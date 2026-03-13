@@ -211,19 +211,11 @@ export class ClickHouseRepository implements CertificateRepository {
     }
 
     try {
-      const [countResult, rowsResult] = await Promise.all([
-        this.client.query({
-          query: `SELECT count() AS cnt FROM certificates WHERE ${whereClause}`,
-          query_params: params,
-          format: "JSONEachRow",
-        }),
-        this.client.query({
-          query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
-          query_params: { ...params, limit, offset },
-          format: "JSONEachRow",
-        }),
-      ]);
-
+      const countResult = await this.client.query({
+        query: `SELECT count() AS cnt FROM certificates WHERE ${whereClause}`,
+        query_params: params,
+        format: "JSONEachRow",
+      });
       const countRows = await countResult.json<{ cnt: string }>();
       const total = Number(countRows[0]?.cnt ?? "0");
 
@@ -231,6 +223,11 @@ export class ClickHouseRepository implements CertificateRepository {
         return { certificates: [], total: 0, page, limit, totalPages: 0 };
       }
 
+      const rowsResult = await this.client.query({
+        query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+        query_params: { ...params, limit, offset },
+        format: "JSONEachRow",
+      });
       const rows = await rowsResult.json<CertificateRow>();
       return {
         certificates: rows.map(rowToCertificate),

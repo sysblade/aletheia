@@ -1,5 +1,5 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { configureLogging, getLogger } from "../utils/logger.ts";
+import { configureLogging, getLogger, isClickHouseStreamBug } from "../utils/logger.ts";
 import type { Config } from "../config.ts";
 import { createRepository } from "../db/factory.ts";
 import { CertStreamClient } from "./stream.ts";
@@ -21,6 +21,7 @@ process.on("uncaughtException", (err) => {
   log.error("Uncaught exception in worker: {error}", { error: err });
 });
 process.on("unhandledRejection", (reason) => {
+  if (isClickHouseStreamBug(reason)) return;
   log.error("Unhandled rejection in worker: {error}", { error: reason });
 });
 const config = workerData as Config;

@@ -3,7 +3,7 @@ import type { Subprocess } from "bun";
 import { Cron } from "croner";
 import type { CliCommand } from "./router.ts";
 import { loadConfig } from "../config.ts";
-import { getLogger } from "../utils/logger.ts";
+import { getLogger, isClickHouseStreamBug } from "../utils/logger.ts";
 import { createRepository } from "../db/factory.ts";
 import { CertFilter } from "../ingestor/filter.ts";
 import { createApp } from "../server/app.ts";
@@ -339,6 +339,10 @@ export const serveCommand: CliCommand = {
       log.error("Uncaught exception: {error}", { error: err });
     });
     process.on("unhandledRejection", (reason) => {
+      if (isClickHouseStreamBug(reason)) {
+        log.debug("Suppressed known @clickhouse/client-web stream cleanup error (Bun Web Streams incompatibility)");
+        return;
+      }
       log.error("Unhandled rejection: {error}", { error: reason });
     });
   },

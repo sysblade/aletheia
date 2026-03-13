@@ -71,3 +71,17 @@ export async function configureLogging(role: string = "main"): Promise<void> {
 }
 
 export { getLogger };
+
+/**
+ * Returns true for the internal stream-cleanup TypeError that @clickhouse/client-web
+ * throws as an unhandled rejection in Bun due to a Web Streams API incompatibility.
+ * The error is harmless (queries complete successfully) but would otherwise flood logs.
+ * Identified by: TypeError with "undefined is not a function", stack only in native frames.
+ */
+export function isClickHouseStreamBug(reason: unknown): boolean {
+  if (!(reason instanceof TypeError)) return false;
+  if (!reason.message.includes("undefined is not a function")) return false;
+  // Stack contains only native/compiled frames — no user-code frames
+  const stack = reason.stack ?? "";
+  return stack.split("\n").slice(1).every((line) => line.includes("native:") || line.trim() === "");
+}

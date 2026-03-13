@@ -1,5 +1,5 @@
 import type { CliCommand } from "./router.ts";
-import { getLogger } from "../utils/logger.ts";
+import { getLogger, isClickHouseStreamBug } from "../utils/logger.ts";
 import { loadConfig } from "../config.ts";
 import { createRepository } from "../db/factory.ts";
 import { CertStreamClient } from "../ingestor/stream.ts";
@@ -89,6 +89,7 @@ export const workerCommand: CliCommand = {
     log.error("Uncaught exception in worker: {error}", { error: err });
   });
   process.on("unhandledRejection", (reason) => {
+    if (isClickHouseStreamBug(reason)) return;
     log.error("Unhandled rejection in worker: {error}", { error: reason });
   });
   },
