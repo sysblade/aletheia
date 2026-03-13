@@ -1,5 +1,5 @@
-// Bun embeds the PNG bytes at compile time via the "base64" loader configured
-// in bunfig.toml — the equivalent of Go's //go:embed.
-import logoBase64 from "../../static/logo.png";
+import logoFile from "../static/logo.png" with { type: "file" };
 
-export const logo = Buffer.from(logoBase64 as unknown as string, "base64");
+// In dev mode: logoFile is the real file path.
+// In compiled mode: Bun embeds the file and logoFile is a $bunfs/ path.
+export { logoFile };

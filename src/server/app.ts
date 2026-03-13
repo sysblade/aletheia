@@ -8,9 +8,8 @@ import type { EventBus } from "../utils/events.ts";
 import type { NewCertificate, Stats } from "../types/certificate.ts";
 import { cachedFn } from "../utils/cache.ts";
 import { apiRoutes } from "./routes/api.ts";
-import { uiRoutes } from "./routes/ui.tsx";
-import { getLogger } from "../utils/logger.ts";
-import { logo } from "./logo.ts";
+import { uiRoutes } from "./routes/ui.tsx";import { getLogger } from "../utils/logger.ts";
+import { logoFile } from "./logo.ts";
 
 const log = getLogger(["aletheia", "server"]);
 
@@ -58,7 +57,7 @@ export function createApp(deps: AppDeps) {
   });
 
   app.get("/logo.png", () => {
-    return new Response(logo, {
+    return new Response(Bun.file(logoFile), {
       headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=31536000" },
     });
   });

@@ -1,6 +1,6 @@
 # Aletheia
 
-![logo](static/logo.png)
+![logo](src/static/logo.png)
 
 Real-time Certificate Transparency log monitor. Streams certificates from CertStream, stores them with full-text search, and provides a web UI with live updates and search.
 
