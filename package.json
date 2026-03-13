@@ -12,6 +12,7 @@
     "clean": "rm -rf out/"
   },
   "dependencies": {
+    "@clickhouse/client-web": "^1.18.2",
     "@logtape/logtape": "^0.12.0",
     "commander": "^12.1.0",
     "croner": "^10.0.1",

@@ -27,10 +27,29 @@ export const workerCommand: CliCommand = {
   const filter = new CertFilter(config.filters.domains, config.filters.issuers);
   const writer = new BatchWriter(repository, metrics);
 
+  // Write an IPC message to stdout. Catch EPIPE (parent closed the pipe) and
+  // treat it as a shutdown signal rather than crashing the process.
+  function writeIPC(msg: object): void {
+    try {
+      process.stdout.write(JSON.stringify(msg) + "\n");
+    } catch (err: unknown) {
+      if (err instanceof Error && (err as NodeJS.ErrnoException).code === "EPIPE") {
+        void shutdown();
+      }
+    }
+  }
+
+  // Also catch EPIPE emitted as a stream error event
+  process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EPIPE") void shutdown();
+  });
+
+  // SIGPIPE is sent on Linux when writing to a broken pipe if the signal is not ignored
+  process.on("SIGPIPE", () => void shutdown());
+
   const buffer = new BatchBuffer(config.batch.size, config.batch.intervalMs, config.batch.maxQueueSize, async (batch) => {
     await writer.write(batch);
-    // Send metrics to parent via stdout (newline-delimited JSON)
-    const metricsMsg = {
+    writeIPC({
       type: "batch-written",
       metrics: {
         ...metrics.snapshot(),
@@ -38,9 +57,7 @@ export const workerCommand: CliCommand = {
         bufferPending: buffer.pending,
         queueDepth: buffer.queueDepth,
       },
-    };
-    // Write to stdout (reserved for IPC), logs go to stderr
-    process.stdout.write(JSON.stringify(metricsMsg) + "\n");
+    });
     log.debug("Batch written, {count} rows", { count: batch.length });
   });
   buffer.start();
@@ -48,21 +65,25 @@ export const workerCommand: CliCommand = {
   const stream = new CertStreamClient(config.certstream.url, filter, buffer, metrics);
   stream.start();
 
-  // Notify parent that worker is ready
-  process.stdout.write(JSON.stringify({ type: "ready" }) + "\n");
+  writeIPC({ type: "ready" });
   log.info("Ingest worker ready");
 
-  // Handle shutdown
+  let shuttingDown = false;
+
   async function shutdown() {
+    if (shuttingDown) return;
+    shuttingDown = true;
     log.info("Shutdown signal received");
     stream.stop();
-    await buffer.stop();
+    // Close repository first — this aborts any in-flight ClickHouse requests,
+    // which unblocks the buffer queue so buffer.stop() can drain cleanly.
     await repository.close();
+    await buffer.stop();
     log.info("Ingest worker stopped");
     process.exit(0);
   }
 
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
   },
 };

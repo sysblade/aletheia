@@ -2,7 +2,7 @@ import type { Config } from "../config.ts";
 import type { CertificateRepository } from "./repository.ts";
 
 /** Supported storage backend types. Configured via STORE_TYPE environment variable. */
-export type StoreType = "sqlite" | "mongodb";
+export type StoreType = "sqlite" | "mongodb" | "clickhouse";
 
 /**
  * Factory function to create a certificate repository based on storage type.
@@ -32,6 +32,12 @@ export async function createRepository(
       const { MongoRepository } = await import("./mongodb/repository.ts");
       const db = await connectMongo(cfg.mongo, skipIndexManagement, appName);
       return new MongoRepository(db);
+    }
+    case "clickhouse": {
+      const { connectClickHouse } = await import("./clickhouse/connection.ts");
+      const { ClickHouseRepository } = await import("./clickhouse/repository.ts");
+      const client = await connectClickHouse(cfg.clickhouse, skipIndexManagement, appName);
+      return new ClickHouseRepository(client);
     }
     default:
       throw new Error(`Unsupported store type: ${storeType satisfies never}`);

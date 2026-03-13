@@ -91,115 +91,142 @@ export const serveCommand: CliCommand = {
     spawnMaintenance("startup");
     let worker: Worker | null = null;
     let workerProc: Subprocess | null = null;
+    let isShuttingDown = false;
+
+    // Exponential backoff for restarts: 1s → 2s → 4s → … → 30s max.
+    // Reset to 1s after the worker has been running stably for 60s.
+    const RESTART_BASE_MS = 1_000;
+    const RESTART_MAX_MS = 30_000;
+    const RESTART_STABLE_MS = 60_000;
+    let restartDelay = RESTART_BASE_MS;
 
     let stoppedResolve: (() => void) | null = null;
     const stoppedPromise = new Promise<void>((resolve) => {
       stoppedResolve = resolve;
     });
 
-    if (isCompiled) {
-      // In compiled mode, spawn the binary with worker subcommand
-      log.info("Running in compiled mode, spawning worker process");
-      workerProc = Bun.spawn({
-        cmd: [process.execPath, "worker"],
-        stdout: "pipe",
-        stderr: "inherit",
-        env: process.env,
-      });
+    function handleWorkerExit(code: number | null) {
+      if (isShuttingDown) {
+        stoppedResolve?.();
+        return;
+      }
+      if (code === 0) {
+        // Clean exit outside of shutdown — still restart (e.g. worker decided to exit on EPIPE)
+        log.warn("Ingest worker exited cleanly, restarting in {delay}ms", { delay: restartDelay });
+      } else {
+        log.error("Ingest worker exited with code {code}, restarting in {delay}ms", { code, delay: restartDelay });
+      }
+      setTimeout(() => {
+        if (!isShuttingDown) startWorker();
+      }, restartDelay);
+      restartDelay = Math.min(restartDelay * 2, RESTART_MAX_MS);
+    }
 
-      // Read stdout for IPC messages (newline-delimited JSON)
-      if (workerProc.stdout && typeof workerProc.stdout !== "number") {
-        const reader = workerProc.stdout.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
+    function startWorker() {
+      const startedAt = Date.now();
 
-        async function readStdout() {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+      if (isCompiled) {
+        workerProc = Bun.spawn({
+          cmd: [process.execPath, "worker"],
+          stdout: "pipe",
+          stderr: "inherit",
+          env: process.env,
+        });
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
+        // Read stdout for IPC messages (newline-delimited JSON)
+        if (workerProc.stdout && typeof workerProc.stdout !== "number") {
+          const reader = workerProc.stdout.getReader();
+          const decoder = new TextDecoder();
+          let ipcBuffer = "";
 
-            for (const line of lines) {
-              if (line.trim()) {
-                try {
-                  const msg = JSON.parse(line) as WorkerMessage;
-                  switch (msg.type) {
-                    case "ready":
-                      log.info("Ingest worker ready");
-                      break;
-                    case "batch-written":
-                      metricsStore.update(msg.metrics);
-                      certEvents.emit([]);
-                      break;
-                    case "error":
-                      log.error("Ingest worker error: {message}", { message: msg.message });
-                      break;
+          async function readStdout() {
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                ipcBuffer += decoder.decode(value, { stream: true });
+                const lines = ipcBuffer.split("\n");
+                ipcBuffer = lines.pop() || "";
+
+                for (const line of lines) {
+                  if (line.trim()) {
+                    try {
+                      const msg = JSON.parse(line) as WorkerMessage;
+                      switch (msg.type) {
+                        case "ready":
+                          log.info("Ingest worker ready");
+                          break;
+                        case "batch-written":
+                          metricsStore.update(msg.metrics);
+                          certEvents.emit([]);
+                          // Reset backoff once worker has been stable long enough
+                          if (Date.now() - startedAt >= RESTART_STABLE_MS) {
+                            restartDelay = RESTART_BASE_MS;
+                          }
+                          break;
+                        case "error":
+                          log.error("Ingest worker error: {message}", { message: msg.message });
+                          break;
+                      }
+                    } catch (err) {
+                      log.warn("Failed to parse IPC message from worker: {error}", { error: String(err), line });
+                    }
                   }
-                } catch (err) {
-                  log.warn("Failed to parse IPC message from worker: {error}", { error: String(err), line });
                 }
+              }
+            } catch (err) {
+              if (err instanceof Error && err.message !== "Reader has been released") {
+                log.error("Error reading worker IPC stream: {error}", { error: String(err) });
               }
             }
           }
-        } catch (err) {
-          if (err instanceof Error && err.message !== "Reader has been released") {
-            log.error("Error reading worker IPC stream: {error}", { error: String(err) });
+
+          readStdout();
+        }
+
+        workerProc.exited.then((code) => handleWorkerExit(code));
+        log.info("Ingest worker process started");
+      } else {
+        // In development mode, use worker thread
+        worker = new Worker(new URL("../ingestor/worker.ts", import.meta.url), {
+          workerData: config,
+        });
+
+        worker.on("message", (msg: WorkerMessage) => {
+          switch (msg.type) {
+            case "ready":
+              log.info("Ingest worker ready");
+              break;
+            case "batch-written":
+              metricsStore.update(msg.metrics);
+              certEvents.emit([]);
+              if (Date.now() - startedAt >= RESTART_STABLE_MS) {
+                restartDelay = RESTART_BASE_MS;
+              }
+              break;
+            case "error":
+              log.error("Ingest worker error: {message}", { message: msg.message });
+              break;
+            case "stopped":
+              log.info("Ingest worker stopped");
+              stoppedResolve?.();
+              break;
           }
-        }
+        });
+
+        worker.on("error", (err) => {
+          log.error("Ingest worker thread error: {error}", { error: String(err) });
+        });
+
+        worker.on("exit", (code) => handleWorkerExit(code));
       }
-
-        readStdout();
-      }
-
-      // Monitor process exit
-      workerProc.exited.then((code) => {
-        if (code !== 0) {
-          log.error("Ingest worker process exited with code {code}", { code });
-        }
-        stoppedResolve?.();
-      });
-
-      log.info("Ingest worker process started");
-    } else {
-      // In development mode, use worker thread
-      worker = new Worker(new URL("../ingestor/worker.ts", import.meta.url), {
-        workerData: config,
-      });
-
-      worker.on("message", (msg: WorkerMessage) => {
-        switch (msg.type) {
-          case "ready":
-            log.info("Ingest worker ready");
-            break;
-          case "batch-written":
-            metricsStore.update(msg.metrics);
-            certEvents.emit([]);
-            break;
-          case "error":
-            log.error("Ingest worker error: {message}", { message: msg.message });
-            break;
-          case "stopped":
-            log.info("Ingest worker stopped");
-            stoppedResolve?.();
-            break;
-        }
-      });
-
-      worker.on("error", (err) => {
-        log.error("Ingest worker thread error: {error}", { error: String(err) });
-      });
-
-      worker.on("exit", (code) => {
-        if (code !== 0) {
-          log.error("Ingest worker exited with code {code}", { code });
-        }
-        stoppedResolve?.();
-      });
     }
+
+    if (isCompiled) {
+      log.info("Running in compiled mode, spawning worker process");
+    }
+    startWorker();
 
     const app = createApp({
       repository,
@@ -255,6 +282,8 @@ export const serveCommand: CliCommand = {
     const SHUTDOWN_TIMEOUT_MS = 10_000;
 
     async function shutdown() {
+      if (isShuttingDown) return;
+      isShuttingDown = true;
       log.info("Shutting down...");
 
       if (worker) {

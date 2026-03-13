@@ -1,6 +1,6 @@
 import type { StoreType } from "./db/factory.ts";
 
-const VALID_STORE_TYPES: readonly string[] = ["sqlite", "mongodb"];
+const VALID_STORE_TYPES: readonly string[] = ["sqlite", "mongodb", "clickhouse"];
 
 function parseStoreType(value: string | undefined): StoreType {
   const type = value || "sqlite";
@@ -33,6 +33,13 @@ export interface Config {
     minPoolSize: number;
     maxIdleTimeMs: number;
   };
+  clickhouse: {
+    url: string;
+    database: string;
+    username: string;
+    password: string;
+    requestTimeoutMs: number;
+  };
   certstream: { url: string };
   batch: { size: number; intervalMs: number; maxQueueSize: number };
   server: { port: number; host: string };
@@ -61,6 +68,13 @@ export function loadConfig(): Config {
       maxPoolSize: Number(process.env.MONGO_MAX_POOL_SIZE) || 10,
       minPoolSize: Number(process.env.MONGO_MIN_POOL_SIZE) || 2,
       maxIdleTimeMs: Number(process.env.MONGO_MAX_IDLE_TIME_MS) || 300000,
+    },
+    clickhouse: {
+      url: process.env.CLICKHOUSE_URL || "http://localhost:8123",
+      database: process.env.CLICKHOUSE_DATABASE || "ctlog",
+      username: process.env.CLICKHOUSE_USERNAME || "default",
+      password: process.env.CLICKHOUSE_PASSWORD || "",
+      requestTimeoutMs: Number(process.env.CLICKHOUSE_REQUEST_TIMEOUT_MS) || 30000,
     },
     certstream: {
       url: process.env.CERTSTREAM_URL || "wss://api.certstream.dev/",

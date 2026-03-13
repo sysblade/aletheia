@@ -8,7 +8,7 @@ import { getLogger } from "../utils/logger.ts";
 
 const log = getLogger(["ctlog", "migrate"]);
 
-const VALID_STORES: StoreType[] = ["sqlite", "mongodb"];
+const VALID_STORES: StoreType[] = ["sqlite", "mongodb", "clickhouse"];
 const CURSOR_FILE = "./data/.migrate-cursor";
 
 /**
@@ -109,6 +109,9 @@ export const migrateCommand: CliCommand = {
     const targetRepo = await createRepository(target, config, false, "ctlog-migrate-target");
 
     try {
+      const { totalCertificates } = await sourceRepo.getStats();
+      const totalBatches = Math.ceil(totalCertificates / batchSize);
+
       let cursor = await loadCursor();
       if (cursor !== null) {
         log.info("Resuming migration from cursor {cursor}", { cursor });
@@ -127,8 +130,9 @@ export const migrateCommand: CliCommand = {
         const inserted = await targetRepo.insertBatch(newCerts);
         totalMigrated += inserted;
 
-        log.info("Batch {batchNumber}: exported {exported}, inserted {inserted}, total migrated {totalMigrated}", {
+        log.info("Batch {batchNumber}/{totalBatches}: exported {exported}, inserted {inserted}, total migrated {totalMigrated}", {
           batchNumber,
+          totalBatches,
           exported: batch.certificates.length,
           inserted,
           totalMigrated,
