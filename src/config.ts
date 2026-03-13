@@ -31,6 +31,7 @@ export interface Config {
     socketTimeoutMs: number;
     maxPoolSize: number;
     minPoolSize: number;
+    maxIdleTimeMs: number;
   };
   certstream: { url: string };
   batch: { size: number; intervalMs: number; maxQueueSize: number };
@@ -59,6 +60,7 @@ export function loadConfig(): Config {
       socketTimeoutMs: Number(process.env.MONGO_SOCKET_TIMEOUT_MS) || 15000,
       maxPoolSize: Number(process.env.MONGO_MAX_POOL_SIZE) || 10,
       minPoolSize: Number(process.env.MONGO_MIN_POOL_SIZE) || 2,
+      maxIdleTimeMs: Number(process.env.MONGO_MAX_IDLE_TIME_MS) || 300000,
     },
     certstream: {
       url: process.env.CERTSTREAM_URL || "wss://api.certstream.dev/",

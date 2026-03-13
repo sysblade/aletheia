@@ -31,7 +31,7 @@ export const serveCommand: CliCommand = {
       retentionDays: config.db.retentionDays,
     });
 
-    const repository = await createRepository(config.store.type, config);
+    const repository = await createRepository(config.store.type, config, false, "ctlog-serve");
 
     const filter = new CertFilter(config.filters.domains, config.filters.issuers);
     log.info("Filter mode: {mode}", { mode: filter.describe() });

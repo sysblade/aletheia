@@ -106,8 +106,8 @@ export const migrateCommand: CliCommand = {
 
     log.info("Starting migration from {source} to {target}, batch size {batchSize}", { source, target, batchSize });
 
-    const sourceRepo = await createRepository(source, config);
-    const targetRepo = await createRepository(target, config);
+    const sourceRepo = await createRepository(source, config, false, "ctlog-migrate-source");
+    const targetRepo = await createRepository(target, config, false, "ctlog-migrate-target");
 
     try {
       let cursor = await loadCursor();

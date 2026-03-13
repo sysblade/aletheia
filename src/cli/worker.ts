@@ -21,7 +21,8 @@ export const workerCommand: CliCommand = {
 
   log.info("Ingest worker starting with store {storeType}", { storeType: config.store.type });
 
-  const repository = await createRepository(config.store.type, config);
+  // Skip index management - serve process handles it
+  const repository = await createRepository(config.store.type, config, true, "ctlog-worker");
   const metrics = new MetricsCollector();
   const filter = new CertFilter(config.filters.domains, config.filters.issuers);
   const writer = new BatchWriter(repository, metrics);

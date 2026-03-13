@@ -7,8 +7,17 @@ export type StoreType = "sqlite" | "mongodb";
 /**
  * Factory function to create a certificate repository based on storage type.
  * Handles database connection, schema migration (SQLite), and returns configured repository.
+ *
+ * @param storeType - Storage backend type (sqlite or mongodb)
+ * @param cfg - Application configuration
+ * @param skipIndexManagement - Skip MongoDB index management (for worker/maintenance processes)
  */
-export async function createRepository(storeType: StoreType, cfg: Config): Promise<CertificateRepository> {
+export async function createRepository(
+  storeType: StoreType,
+  cfg: Config,
+  skipIndexManagement = false,
+  appName = "ctlog"
+): Promise<CertificateRepository> {
   switch (storeType) {
     case "sqlite": {
       const { createDatabase } = await import("./sqlite/connection.ts");
@@ -21,7 +30,7 @@ export async function createRepository(storeType: StoreType, cfg: Config): Promi
     case "mongodb": {
       const { connectMongo } = await import("./mongodb/connection.ts");
       const { MongoRepository } = await import("./mongodb/repository.ts");
-      const db = await connectMongo(cfg.mongo);
+      const db = await connectMongo(cfg.mongo, skipIndexManagement, appName);
       return new MongoRepository(db);
     }
     default:

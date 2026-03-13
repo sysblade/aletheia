@@ -16,7 +16,8 @@ export const maintenanceCommand: CliCommand = {
 
     log.info("Starting one-off database maintenance");
 
-    const repository = await createRepository(config.store.type, config);
+    // Skip index management - serve process handles it
+    const repository = await createRepository(config.store.type, config, true, "ctlog-maintenance");
 
     try {
       await repository.maintenance();

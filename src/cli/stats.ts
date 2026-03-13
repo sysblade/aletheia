@@ -32,7 +32,8 @@ export const statsCommand: CliCommand = {
       log.info("Computing stats for latest completed periods");
     }
 
-    const repository = await createRepository(config.store.type, config);
+    // Skip index management - serve process handles it
+    const repository = await createRepository(config.store.type, config, true, "ctlog-stats");
 
     try {
       if (parsedArgs.backfill) {
