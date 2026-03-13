@@ -4,7 +4,7 @@ import { Database as BunDatabase } from "bun:sqlite";
 import type { Database } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
 
-const log = getLogger(["ctlog", "sqlite"]);
+const log = getLogger(["aletheia", "sqlite"]);
 
 /**
  * Create and configure SQLite database connection with optimized pragmas.

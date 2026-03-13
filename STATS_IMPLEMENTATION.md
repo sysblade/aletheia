@@ -150,7 +150,7 @@ bun run src/index.ts migrate
 
 Verify tables were created:
 ```bash
-sqlite3 data/ctlog.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%stats%';"
+sqlite3 data/aletheia.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%stats%';"
 ```
 
 Expected output:
@@ -185,13 +185,13 @@ bun run src/index.ts stats --backfill --from=2025-03-01 --to=2025-03-13 --force
 
 ```bash
 # Check hourly stats
-sqlite3 data/ctlog.sqlite "SELECT COUNT(*) FROM hourly_stats;"
+sqlite3 data/aletheia.sqlite "SELECT COUNT(*) FROM hourly_stats;"
 
 # Check daily stats
-sqlite3 data/ctlog.sqlite "SELECT COUNT(*) FROM daily_stats;"
+sqlite3 data/aletheia.sqlite "SELECT COUNT(*) FROM daily_stats;"
 
 # View sample data
-sqlite3 data/ctlog.sqlite "SELECT period_start, total_certificates, unique_domains FROM hourly_stats LIMIT 5;"
+sqlite3 data/aletheia.sqlite "SELECT period_start, total_certificates, unique_domains FROM hourly_stats LIMIT 5;"
 ```
 
 ### 5. Test Web UI

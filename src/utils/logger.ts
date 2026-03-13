@@ -47,7 +47,7 @@ export async function configureLogging(role: string = "main"): Promise<void> {
     },
     loggers: [
       {
-        category: "ctlog",
+        category: "aletheia",
         lowestLevel: level,
         sinks: ["console"],
       },

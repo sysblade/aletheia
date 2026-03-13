@@ -11,7 +11,7 @@ import { apiRoutes } from "./routes/api.ts";
 import { uiRoutes } from "./routes/ui.tsx";
 import { getLogger } from "../utils/logger.ts";
 
-const log = getLogger(["ctlog", "server"]);
+const log = getLogger(["aletheia", "server"]);
 
 /** Hono environment type defining context variables available in all routes. */
 export type AppEnv = {

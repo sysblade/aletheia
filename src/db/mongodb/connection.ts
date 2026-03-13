@@ -3,7 +3,7 @@ import type { CertificateDocument } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
 import type { Config } from "../../config.ts";
 
-const log = getLogger(["ctlog", "mongodb"]);
+const log = getLogger(["aletheia", "mongodb"]);
 
 /**
  * Connect to MongoDB and optionally ensure indexes and counters are initialized.
@@ -12,7 +12,7 @@ const log = getLogger(["ctlog", "mongodb"]);
  * @param mongoCfg - MongoDB configuration
  * @param skipIndexManagement - Skip index creation/dropping (for worker processes to avoid conflicts)
  */
-export async function connectMongo(mongoCfg: Config["mongo"], skipIndexManagement = false, appName = "ctlog"): Promise<Db> {
+export async function connectMongo(mongoCfg: Config["mongo"], skipIndexManagement = false, appName = "aletheia"): Promise<Db> {
   const redactedUrl = mongoCfg.url.replace(/:\/\/[^@]*@/, "://***@");
   log.info("Connecting to MongoDB at {url}, database {database} (appName={appName})", {
     url: redactedUrl,

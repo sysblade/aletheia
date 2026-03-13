@@ -6,7 +6,7 @@ import { loadConfig } from "../config.ts";
 import { createRepository } from "../db/factory.ts";
 import { getLogger } from "../utils/logger.ts";
 
-const log = getLogger(["ctlog", "migrate"]);
+const log = getLogger(["aletheia", "migrate"]);
 
 const VALID_STORES: StoreType[] = ["sqlite", "mongodb", "clickhouse"];
 const CURSOR_FILE = "./data/.migrate-cursor";
@@ -105,8 +105,8 @@ export const migrateCommand: CliCommand = {
 
     log.info("Starting migration from {source} to {target}, batch size {batchSize}", { source, target, batchSize });
 
-    const sourceRepo = await createRepository(source, config, false, "ctlog-migrate-source");
-    const targetRepo = await createRepository(target, config, false, "ctlog-migrate-target");
+    const sourceRepo = await createRepository(source, config, false, "aletheia-migrate-source");
+    const targetRepo = await createRepository(target, config, false, "aletheia-migrate-target");
 
     try {
       const { totalCertificates } = await sourceRepo.getStats();

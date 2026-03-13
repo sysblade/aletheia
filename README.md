@@ -31,10 +31,10 @@ See `.env.example` for all options.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `STORE_TYPE` | `sqlite` | Storage backend: `sqlite` or `mongodb` |
-| `DB_PATH` | `./data/ctlog.sqlite` | SQLite database file path |
+| `DB_PATH` | `./data/aletheia.sqlite` | SQLite database file path |
 | `DB_RETENTION_DAYS` | `90` | Auto-delete certificates older than this |
 | `MONGO_URL` | `mongodb://localhost:27017` | MongoDB connection URL |
-| `MONGO_DATABASE` | `ctlog` | MongoDB database name |
+| `MONGO_DATABASE` | `aletheia` | MongoDB database name |
 | `CERTSTREAM_URL` | `wss://api.certstream.dev/` | CertStream WebSocket endpoint |
 | `BATCH_SIZE` | `500` | Flush buffer when this many certs accumulate |
 | `BATCH_INTERVAL` | `3000` | Buffer flush interval in milliseconds |
@@ -77,7 +77,7 @@ STORE_TYPE=sqlite
 # MongoDB - horizontal scaling, text index search
 STORE_TYPE=mongodb
 MONGO_URL=mongodb://localhost:27017
-MONGO_DATABASE=ctlog
+MONGO_DATABASE=aletheia
 ```
 
 ## Migration

@@ -17,7 +17,7 @@ import type { CertificateRow, DailyStatsRow, HourlyStatsRow } from "./schema.ts"
 import { getLogger } from "../../utils/logger.ts";
 import { extractTwoLevelDomain, isWildcardDomain } from "../../utils/domain.ts";
 
-const log = getLogger(["ctlog", "clickhouse", "repository"]);
+const log = getLogger(["aletheia", "clickhouse", "repository"]);
 
 const DOMAIN_BATCH_SIZE = 5000;
 

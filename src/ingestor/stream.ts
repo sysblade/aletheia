@@ -5,7 +5,7 @@ import { BatchBuffer } from "./buffer.ts";
 import type { MetricsCollector } from "../utils/metrics.ts";
 import { getLogger } from "../utils/logger.ts";
 
-const log = getLogger(["ctlog", "stream"]);
+const log = getLogger(["aletheia", "stream"]);
 
 const MAX_BACKOFF_MS = 60_000;
 const INITIAL_BACKOFF_MS = 1_000;

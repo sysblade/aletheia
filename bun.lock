@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "ctlog",
+      "name": "aletheia",
       "dependencies": {
         "@clickhouse/client-web": "^1.18.2",
         "@logtape/logtape": "^0.12.0",

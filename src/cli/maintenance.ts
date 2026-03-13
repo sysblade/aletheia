@@ -11,13 +11,13 @@ export const maintenanceCommand: CliCommand = {
   name: "maintenance",
   description: "Run database maintenance (internal use for scheduled maintenance)",
   async run() {
-    const log = getLogger(["ctlog", "maintenance"]);
+    const log = getLogger(["aletheia", "maintenance"]);
     const config = loadConfig();
 
     log.info("Starting one-off database maintenance");
 
     // Skip index management - serve process handles it
-    const repository = await createRepository(config.store.type, config, true, "ctlog-maintenance");
+    const repository = await createRepository(config.store.type, config, true, "aletheia-maintenance");
 
     try {
       await repository.maintenance();

@@ -57,13 +57,13 @@ export function loadConfig(): Config {
       type: parseStoreType(process.env.STORE_TYPE),
     },
     db: {
-      path: process.env.DB_PATH || "./data/ctlog.sqlite",
+      path: process.env.DB_PATH || "./data/aletheia.sqlite",
       retentionDays: Number(process.env.DB_RETENTION_DAYS) || 90,
       maintenanceIntervalHours: Number(process.env.DB_MAINTENANCE_INTERVAL_HOURS) || 6,
     },
     mongo: {
       url: process.env.MONGO_URL || "mongodb://localhost:27017",
-      database: process.env.MONGO_DATABASE || "ctlog",
+      database: process.env.MONGO_DATABASE || "aletheia",
       socketTimeoutMs: Number(process.env.MONGO_SOCKET_TIMEOUT_MS) || 15000,
       maxPoolSize: Number(process.env.MONGO_MAX_POOL_SIZE) || 10,
       minPoolSize: Number(process.env.MONGO_MIN_POOL_SIZE) || 2,
@@ -71,7 +71,7 @@ export function loadConfig(): Config {
     },
     clickhouse: {
       url: process.env.CLICKHOUSE_URL || "http://localhost:8123",
-      database: process.env.CLICKHOUSE_DATABASE || "ctlog",
+      database: process.env.CLICKHOUSE_DATABASE || "aletheia",
       username: process.env.CLICKHOUSE_USERNAME || "default",
       password: process.env.CLICKHOUSE_PASSWORD || "",
       requestTimeoutMs: Number(process.env.CLICKHOUSE_REQUEST_TIMEOUT_MS) || 30000,

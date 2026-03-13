@@ -12,7 +12,7 @@ import { getLogger } from "../../utils/logger.ts";
 
 const LIVE_STREAM_LIMIT = 25;
 
-const log = getLogger(["ctlog", "server", "sse"]);
+const log = getLogger(["aletheia", "server", "sse"]);
 
 /** Server-rendered UI routes using HTMX and JSX templates. */
 export const uiRoutes = new Hono<AppEnv>();

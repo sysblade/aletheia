@@ -29,22 +29,22 @@ Replaced the custom CLI router with **commander.js**, the industry-standard CLI 
 
 ```bash
 # Global help
-$ ctlog --help
-$ ctlog -h
+$ aletheia --help
+$ aletheia -h
 
 # Command-specific help
-$ ctlog serve --help
-$ ctlog migrate --help
-$ ctlog stats --help
-$ ctlog worker --help
-$ ctlog maintenance --help
+$ aletheia serve --help
+$ aletheia migrate --help
+$ aletheia stats --help
+$ aletheia worker --help
+$ aletheia maintenance --help
 ```
 
 **Example: Migrate command help**
 ```bash
-$ ctlog migrate --help
+$ aletheia migrate --help
 
-Usage: ctlog migrate [options]
+Usage: aletheia migrate [options]
 
 Migrate data between storage backends (SQLite ↔ MongoDB)
 
@@ -55,8 +55,8 @@ Options:
   -h, --help           display help for command
 
 Examples:
-  $ ctlog migrate --source sqlite --target mongodb
-  $ ctlog migrate --source mongodb --target sqlite --batch-size 500
+  $ aletheia migrate --source sqlite --target mongodb
+  $ aletheia migrate --source mongodb --target sqlite --batch-size 500
 
 Notes:
   - Migration is resumable: if interrupted, it will continue from where it left off
@@ -67,8 +67,8 @@ Notes:
 ### Version Command
 
 ```bash
-$ ctlog --version
-$ ctlog -V
+$ aletheia --version
+$ aletheia -V
 ```
 
 ### Better Option Parsing
@@ -77,10 +77,10 @@ The `stats` command now uses proper option parsing:
 
 ```bash
 # Old way (still works)
-$ ctlog stats --backfill --from=2025-03-01 --to=2025-03-13
+$ aletheia stats --backfill --from=2025-03-01 --to=2025-03-13
 
 # New way (also works)
-$ ctlog stats --backfill --from 2025-03-01 --to 2025-03-13
+$ aletheia stats --backfill --from 2025-03-01 --to 2025-03-13
 ```
 
 ### Rich Help Text
@@ -88,9 +88,9 @@ $ ctlog stats --backfill --from 2025-03-01 --to 2025-03-13
 The stats command includes examples:
 
 ```bash
-$ ctlog stats --help
+$ aletheia stats --help
 
-Usage: ctlog stats [options]
+Usage: aletheia stats [options]
 
 Compute and aggregate certificate statistics
 
@@ -103,11 +103,11 @@ Options:
   -h, --help              display help for command
 
 Examples:
-  $ ctlog stats                              # Compute missing stats for last completed periods
-  $ ctlog stats --backfill                   # Fill all missing stats from oldest to yesterday
-  $ ctlog stats --backfill --from 2025-03-01 --to 2025-03-13
-  $ ctlog stats --backfill --granularity hourly
-  $ ctlog stats --backfill --force           # Recompute all (overwrite existing)
+  $ aletheia stats                              # Compute missing stats for last completed periods
+  $ aletheia stats --backfill                   # Fill all missing stats from oldest to yesterday
+  $ aletheia stats --backfill --from 2025-03-01 --to 2025-03-13
+  $ aletheia stats --backfill --granularity hourly
+  $ aletheia stats --backfill --force           # Recompute all (overwrite existing)
 ```
 
 ## Installation
@@ -177,8 +177,8 @@ The CLI still works in compiled mode:
 
 ```bash
 bun run compile
-./out/ctlog --help
-./out/ctlog stats --help
+./out/aletheia --help
+./out/aletheia stats --help
 ```
 
 Commander is bundled into the binary, so no external dependencies are needed at runtime.

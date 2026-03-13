@@ -4,7 +4,7 @@ import type { MetricsCollector } from "../utils/metrics.ts";
 import type { EventBus } from "../utils/events.ts";
 import { getLogger } from "../utils/logger.ts";
 
-const log = getLogger(["ctlog", "writer"]);
+const log = getLogger(["aletheia", "writer"]);
 
 /**
  * Writes certificate batches to repository and updates metrics.

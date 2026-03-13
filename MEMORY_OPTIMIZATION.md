@@ -140,8 +140,8 @@ const pipeline = [
 For large periods (>10K certificates), the implementation logs progress every 10K certificates:
 
 ```
-12:34:56.789 DBG ctlog·sqlite [STATS] Domain extraction progress: 10000/87654 certificates
-12:34:57.234 DBG ctlog·sqlite [STATS] Domain extraction progress: 20000/87654 certificates
+12:34:56.789 DBG aletheia·sqlite [STATS] Domain extraction progress: 10000/87654 certificates
+12:34:57.234 DBG aletheia·sqlite [STATS] Domain extraction progress: 20000/87654 certificates
 ```
 
 This helps monitor long-running backfills.

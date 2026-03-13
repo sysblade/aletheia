@@ -16,13 +16,13 @@ export const workerCommand: CliCommand = {
   name: "worker",
   description: "Run the ingestor worker (internal use for compiled mode)",
   async run() {
-  const log = getLogger(["ctlog", "ingest-worker"]);
+  const log = getLogger(["aletheia", "ingest-worker"]);
   const config = loadConfig();
 
   log.info("Ingest worker starting with store {storeType}", { storeType: config.store.type });
 
   // Skip index management - serve process handles it
-  const repository = await createRepository(config.store.type, config, true, "ctlog-worker");
+  const repository = await createRepository(config.store.type, config, true, "aletheia-worker");
   const metrics = new MetricsCollector();
   const filter = new CertFilter(config.filters.domains, config.filters.issuers);
   const writer = new BatchWriter(repository, metrics);

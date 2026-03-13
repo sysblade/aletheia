@@ -9,7 +9,7 @@ import { statsCommand } from "./cli/stats.ts";
 const program = new Command();
 
 program
-  .name("ctlog")
+  .name("aletheia")
   .description("Certificate Transparency Log Monitor - Real-time TLS certificate tracking")
   .version("1.0.0");
 
@@ -31,8 +31,8 @@ program
   .option("--batch-size <n>", "Number of certificates per batch", "1000")
   .addHelpText("after", `
 Examples:
-  $ ctlog migrate --source sqlite --target mongodb
-  $ ctlog migrate --source mongodb --target sqlite --batch-size 500
+  $ aletheia migrate --source sqlite --target mongodb
+  $ aletheia migrate --source mongodb --target sqlite --batch-size 500
 
 Notes:
   - Migration is resumable: if interrupted, it will continue from where it left off
@@ -80,11 +80,11 @@ program
   .option("--force", "Recompute all periods in range (overwrite existing stats)")
   .addHelpText("after", `
 Examples:
-  $ ctlog stats                              # Compute missing stats for last completed periods
-  $ ctlog stats --backfill                   # Fill all missing stats from oldest to yesterday
-  $ ctlog stats --backfill --from 2025-03-01 --to 2025-03-13
-  $ ctlog stats --backfill --granularity hourly
-  $ ctlog stats --backfill --force           # Recompute all (overwrite existing)
+  $ aletheia stats                              # Compute missing stats for last completed periods
+  $ aletheia stats --backfill                   # Fill all missing stats from oldest to yesterday
+  $ aletheia stats --backfill --from 2025-03-01 --to 2025-03-13
+  $ aletheia stats --backfill --granularity hourly
+  $ aletheia stats --backfill --force           # Recompute all (overwrite existing)
   `)
   .action(async (options) => {
     await configureLogging("stats");

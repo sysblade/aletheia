@@ -7,7 +7,7 @@ const testConfig = {
   db: { path: ":memory:", retentionDays: 90, maintenanceIntervalHours: 6 },
   mongo: {
     url: "mongodb://localhost:27017",
-    database: "ctlog_test",
+    database: "aletheia_test",
     socketTimeoutMs: 15000,
     maxPoolSize: 10,
     minPoolSize: 2,

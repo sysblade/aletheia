@@ -18,7 +18,7 @@ export const statsCommand: CliCommand = {
   name: "stats",
   description: "Compute and aggregate certificate statistics",
   async run(args: string[]) {
-    const log = getLogger(["ctlog", "stats"]);
+    const log = getLogger(["aletheia", "stats"]);
     const config = loadConfig();
 
     const parsedArgs = parseArgs(args);
@@ -33,7 +33,7 @@ export const statsCommand: CliCommand = {
     }
 
     // Skip index management - serve process handles it
-    const repository = await createRepository(config.store.type, config, true, "ctlog-stats");
+    const repository = await createRepository(config.store.type, config, true, "aletheia-stats");
 
     try {
       if (parsedArgs.backfill) {
@@ -108,7 +108,7 @@ async function computeLatestStats(
   repository: Awaited<ReturnType<typeof createRepository>>,
   granularity: ("hourly" | "daily")[],
 ): Promise<void> {
-  const log = getLogger(["ctlog", "stats"]);
+  const log = getLogger(["aletheia", "stats"]);
   const now = Math.floor(Date.now() / 1000);
 
   if (granularity.includes("hourly")) {
@@ -144,7 +144,7 @@ async function backfillStats(
   repository: Awaited<ReturnType<typeof createRepository>>,
   parsedArgs: ParsedArgs,
 ): Promise<void> {
-  const log = getLogger(["ctlog", "stats"]);
+  const log = getLogger(["aletheia", "stats"]);
   let { from, to } = parsedArgs;
 
   if (from === 0 || to === 0) {
@@ -178,7 +178,7 @@ async function backfillHourly(
   to: number,
   force: boolean,
 ): Promise<void> {
-  const log = getLogger(["ctlog", "stats"]);
+  const log = getLogger(["aletheia", "stats"]);
 
   const fromHour = Math.floor(from / 3600) * 3600;
   const toHour = Math.floor(to / 3600) * 3600;
@@ -241,7 +241,7 @@ async function backfillDaily(
   to: number,
   force: boolean,
 ): Promise<void> {
-  const log = getLogger(["ctlog", "stats"]);
+  const log = getLogger(["aletheia", "stats"]);
 
   const fromDay = Math.floor(from / 86400) * 86400;
   const toDay = Math.floor(to / 86400) * 86400;

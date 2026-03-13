@@ -8,7 +8,7 @@ import type { CertificateDocument, DailyStatsDocument, HourlyStatsDocument } fro
 import { getLogger } from "../../utils/logger.ts";
 import { extractTwoLevelDomain, isWildcardDomain } from "../../utils/domain.ts";
 
-const log = getLogger(["ctlog", "mongodb", "repository"]);
+const log = getLogger(["aletheia", "mongodb", "repository"]);
 
 function docToCertificate(doc: CertificateDocument): Certificate {
   return {

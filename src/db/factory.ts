@@ -16,7 +16,7 @@ export async function createRepository(
   storeType: StoreType,
   cfg: Config,
   skipIndexManagement = false,
-  appName = "ctlog"
+  appName = "aletheia"
 ): Promise<CertificateRepository> {
   switch (storeType) {
     case "sqlite": {

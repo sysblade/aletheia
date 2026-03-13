@@ -2,7 +2,7 @@ import { getLogger } from "./logger.ts";
 
 type Listener<T> = (data: T) => void;
 
-const log = getLogger(["ctlog", "events"]);
+const log = getLogger(["aletheia", "events"]);
 
 /**
  * Simple synchronous event bus for pub/sub communication.

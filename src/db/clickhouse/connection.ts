@@ -2,12 +2,12 @@ import { createClient, type ClickHouseClient } from "@clickhouse/client-web";
 import { getLogger } from "../../utils/logger.ts";
 import type { Config } from "../../config.ts";
 
-const log = getLogger(["ctlog", "clickhouse"]);
+const log = getLogger(["aletheia", "clickhouse"]);
 
 export async function connectClickHouse(
   cfg: Config["clickhouse"],
   skipTableManagement = false,
-  appName = "ctlog",
+  appName = "aletheia",
 ): Promise<ClickHouseClient> {
   log.info("Connecting to ClickHouse at {url}, database {database} (appName={appName})", {
     url: cfg.url,

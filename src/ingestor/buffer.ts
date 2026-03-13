@@ -2,7 +2,7 @@ import PQueue from "p-queue";
 import type { NewCertificate } from "../types/certificate.ts";
 import { getLogger } from "../utils/logger.ts";
 
-const log = getLogger(["ctlog", "buffer"]);
+const log = getLogger(["aletheia", "buffer"]);
 
 /**
  * Batching buffer for certificates with size and time-based flushing.

@@ -10,7 +10,7 @@ import * as m005 from "./migrations/005_fts_detail_full.ts";
 import * as m006 from "./migrations/006_add_not_after_index.ts";
 import * as m007 from "./migrations/007_create_stats_tables.ts";
 
-const log = getLogger(["ctlog", "migrate"]);
+const log = getLogger(["aletheia", "migrate"]);
 
 /**
  * Migration provider that loads migrations from static imports.

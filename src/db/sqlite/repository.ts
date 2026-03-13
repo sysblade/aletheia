@@ -7,7 +7,7 @@ import type { Certificate, DailyStats, ExportBatch, HourlyStats, NewCertificate,
 import type { Database, CertificateRow, DailyStatsRow, HourlyStatsRow } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
 
-const log = getLogger(["ctlog", "sqlite", "repository"]);
+const log = getLogger(["aletheia", "sqlite", "repository"]);
 
 const INSERT_CHUNK_SIZE = 50;
 

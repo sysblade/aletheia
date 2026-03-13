@@ -23,7 +23,7 @@ export const serveCommand: CliCommand = {
     const config = loadConfig();
     const metricsStore = new MetricsStore();
     const certEvents = new EventBus<NewCertificate[]>();
-    const log = getLogger(["ctlog", "main"]);
+    const log = getLogger(["aletheia", "main"]);
 
     log.info("Starting CT Log Monitor on port {port}, store {storeType}, retention {retentionDays} days", {
       port: config.server.port,
@@ -31,7 +31,7 @@ export const serveCommand: CliCommand = {
       retentionDays: config.db.retentionDays,
     });
 
-    const repository = await createRepository(config.store.type, config, false, "ctlog-serve");
+    const repository = await createRepository(config.store.type, config, false, "aletheia-serve");
 
     const filter = new CertFilter(config.filters.domains, config.filters.issuers);
     log.info("Filter mode: {mode}", { mode: filter.describe() });

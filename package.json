@@ -1,5 +1,5 @@
 {
-  "name": "ctlog",
+  "name": "aletheia",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
@@ -8,7 +8,7 @@
     "start": "bun run src/index.ts serve",
     "check": "bun x tsc --noEmit",
     "test": "bun test",
-    "compile": "bun build src/index.ts --compile --outfile out/ctlog",
+    "compile": "bun build src/index.ts --compile --outfile out/aletheia",
     "clean": "rm -rf out/"
   },
   "dependencies": {
