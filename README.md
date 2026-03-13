@@ -44,6 +44,8 @@ See `.env.example` for all options.
 | `MONGO_MAX_POOL_SIZE` | `10` | MongoDB connection pool size |
 | `CLICKHOUSE_URL` | `http://localhost:8123` | ClickHouse HTTP endpoint |
 | `CLICKHOUSE_DATABASE` | `aletheia` | ClickHouse database name |
+| `CLICKHOUSE_REQUEST_TIMEOUT_MS` | `30000` | Timeout for regular queries (ms) |
+| `CLICKHOUSE_MAINTENANCE_TIMEOUT_MS` | `600000` | Timeout for `OPTIMIZE TABLE` and other long maintenance ops (ms) |
 | `CERTSTREAM_URL` | `wss://api.certstream.dev/` | CertStream WebSocket endpoint |
 | `BATCH_SIZE` | `500` | Flush buffer when this many certs accumulate |
 | `BATCH_INTERVAL` | `3000` | Buffer flush interval in milliseconds |

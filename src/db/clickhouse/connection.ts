@@ -15,13 +15,14 @@ export async function connectClickHouse(
     appName,
   });
 
+  const isMaintenance = appName.includes("maintenance");
   const client = createClient({
     url: cfg.url,
     username: cfg.username,
     password: cfg.password,
     database: cfg.database,
     application: appName,
-    request_timeout: cfg.requestTimeoutMs,
+    request_timeout: isMaintenance ? cfg.maintenanceTimeoutMs : cfg.requestTimeoutMs,
     clickhouse_settings: {
       // Allow experimental lightweight deletes (ALTER TABLE ... DELETE still works on older versions)
       allow_experimental_lightweight_delete: 1,

@@ -39,6 +39,8 @@ export interface Config {
     username: string;
     password: string;
     requestTimeoutMs: number;
+    /** Timeout for long-running maintenance operations (OPTIMIZE TABLE, etc.). */
+    maintenanceTimeoutMs: number;
   };
   certstream: { url: string };
   batch: { size: number; intervalMs: number; maxQueueSize: number };
@@ -75,6 +77,7 @@ export function loadConfig(): Config {
       username: process.env.CLICKHOUSE_USERNAME || "default",
       password: process.env.CLICKHOUSE_PASSWORD || "",
       requestTimeoutMs: Number(process.env.CLICKHOUSE_REQUEST_TIMEOUT_MS) || 30000,
+      maintenanceTimeoutMs: Number(process.env.CLICKHOUSE_MAINTENANCE_TIMEOUT_MS) || 600000,
     },
     certstream: {
       url: process.env.CERTSTREAM_URL || "wss://api.certstream.dev/",

@@ -23,7 +23,7 @@ export const maintenanceCommand: CliCommand = {
       await repository.maintenance();
       log.info("Database maintenance completed successfully");
     } catch (err) {
-      log.error("Database maintenance failed: {error}", { error: String(err) });
+      log.error("Database maintenance failed: {error}", { error: err });
       process.exit(1);
     } finally {
       await repository.close();

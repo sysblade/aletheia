@@ -3,7 +3,7 @@ export function SearchForm({ query }: { query?: string }) {
     <form
       hx-get="/search/results"
       hx-target="#search-results"
-      hx-trigger="submit, keyup changed delay:300ms from:#search-input"
+      hx-trigger="submit"
       hx-indicator="#search-spinner"
       class="w-full"
     >
