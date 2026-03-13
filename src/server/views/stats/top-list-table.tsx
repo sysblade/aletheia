@@ -10,8 +10,6 @@ export function TopListTable({ title, entries }: { title: string; entries: TopEn
     );
   }
 
-  const maxCount = entries[0]?.count ?? 1;
-
   return (
     <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
       <h3 class="text-lg font-semibold text-green-400 mb-4">{title}</h3>
@@ -25,24 +23,13 @@ export function TopListTable({ title, entries }: { title: string; entries: TopEn
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-700">
-            {entries.map((entry, i) => {
-              const barWidth = (entry.count / maxCount) * 100;
-              return (
-                <tr class="hover:bg-gray-750">
-                  <td class="py-2 pr-4 text-gray-500">{i + 1}</td>
-                  <td class="py-2 font-mono text-gray-300">
-                    <div class="flex items-center gap-2">
-                      <div
-                        class="bg-green-600/30 h-4 rounded"
-                        style={`width: ${Math.max(2, barWidth)}%;`}
-                      ></div>
-                      <span>{entry.value}</span>
-                    </div>
-                  </td>
-                  <td class="py-2 text-right text-green-400">{entry.count.toLocaleString()}</td>
-                </tr>
-              );
-            })}
+            {entries.map((entry, i) => (
+              <tr class="hover:bg-gray-750">
+                <td class="py-2 pr-4 text-gray-500">{i + 1}</td>
+                <td class="py-2 font-mono text-gray-300">{entry.value}</td>
+                <td class="py-2 text-right text-green-400">{entry.count.toLocaleString()}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
