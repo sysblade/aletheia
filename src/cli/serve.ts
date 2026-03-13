@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import type { Subprocess } from "bun";
 import type { CliCommand } from "./router.ts";
 import { loadConfig } from "../config.ts";
 import { getLogger } from "../utils/logger.ts";
@@ -30,44 +31,71 @@ export const serveCommand: CliCommand = {
     const filter = new CertFilter(config.filters.domains, config.filters.issuers);
     log.info("Filter mode: {mode}", { mode: filter.describe() });
 
-    const worker = new Worker(new URL("../ingestor/worker.ts", import.meta.url), {
-      workerData: config,
-    });
+    // Detect if running from compiled binary
+    const isCompiled = !Bun.main.endsWith(".ts");
+    let worker: Worker | null = null;
+    let workerProc: Subprocess | null = null;
 
     let stoppedResolve: (() => void) | null = null;
     const stoppedPromise = new Promise<void>((resolve) => {
       stoppedResolve = resolve;
     });
 
-    worker.on("message", (msg: WorkerMessage) => {
-      switch (msg.type) {
-        case "ready":
-          log.info("Ingest worker ready");
-          break;
-        case "batch-written":
-          metricsStore.update(msg.metrics);
-          certEvents.emit([]);
-          break;
-        case "error":
-          log.error("Ingest worker error: {message}", { message: msg.message });
-          break;
-        case "stopped":
-          log.info("Ingest worker stopped");
-          stoppedResolve?.();
-          break;
-      }
-    });
+    if (isCompiled) {
+      // In compiled mode, spawn the binary with worker subcommand
+      log.info("Running in compiled mode, spawning worker process");
+      workerProc = Bun.spawn({
+        cmd: [process.execPath, "worker"],
+        stdout: "inherit",
+        stderr: "inherit",
+        env: process.env,
+      });
 
-    worker.on("error", (err) => {
-      log.error("Ingest worker thread error: {error}", { error: String(err) });
-    });
+      // Monitor process exit
+      workerProc.exited.then((code) => {
+        if (code !== 0) {
+          log.error("Ingest worker process exited with code {code}", { code });
+        }
+        stoppedResolve?.();
+      });
 
-    worker.on("exit", (code) => {
-      if (code !== 0) {
-        log.error("Ingest worker exited with code {code}", { code });
-      }
-      stoppedResolve?.();
-    });
+      log.info("Ingest worker process started");
+    } else {
+      // In development mode, use worker thread
+      worker = new Worker(new URL("../ingestor/worker.ts", import.meta.url), {
+        workerData: config,
+      });
+
+      worker.on("message", (msg: WorkerMessage) => {
+        switch (msg.type) {
+          case "ready":
+            log.info("Ingest worker ready");
+            break;
+          case "batch-written":
+            metricsStore.update(msg.metrics);
+            certEvents.emit([]);
+            break;
+          case "error":
+            log.error("Ingest worker error: {message}", { message: msg.message });
+            break;
+          case "stopped":
+            log.info("Ingest worker stopped");
+            stoppedResolve?.();
+            break;
+        }
+      });
+
+      worker.on("error", (err) => {
+        log.error("Ingest worker thread error: {error}", { error: String(err) });
+      });
+
+      worker.on("exit", (code) => {
+        if (code !== 0) {
+          log.error("Ingest worker exited with code {code}", { code });
+        }
+        stoppedResolve?.();
+      });
+    }
 
     const app = createApp({
       repository,
@@ -101,16 +129,32 @@ export const serveCommand: CliCommand = {
     async function shutdown() {
       log.info("Shutting down...");
 
-      worker.postMessage({ type: "shutdown" } satisfies MainMessage);
-      await Promise.race([
-        stoppedPromise,
-        new Promise<void>((resolve) =>
-          setTimeout(() => {
-            log.warn("Worker shutdown timed out after {ms}ms, forcing exit", { ms: SHUTDOWN_TIMEOUT_MS });
-            resolve();
-          }, SHUTDOWN_TIMEOUT_MS),
-        ),
-      ]);
+      if (worker) {
+        // Worker thread mode - send shutdown message
+        worker.postMessage({ type: "shutdown" } satisfies MainMessage);
+        await Promise.race([
+          stoppedPromise,
+          new Promise<void>((resolve) =>
+            setTimeout(() => {
+              log.warn("Worker shutdown timed out after {ms}ms, forcing exit", { ms: SHUTDOWN_TIMEOUT_MS });
+              resolve();
+            }, SHUTDOWN_TIMEOUT_MS),
+          ),
+        ]);
+      } else if (workerProc) {
+        // Process mode - send SIGTERM
+        workerProc.kill("SIGTERM");
+        await Promise.race([
+          workerProc.exited,
+          new Promise<void>((resolve) =>
+            setTimeout(() => {
+              log.warn("Worker process shutdown timed out after {ms}ms, forcing kill", { ms: SHUTDOWN_TIMEOUT_MS });
+              workerProc?.kill("SIGKILL");
+              resolve();
+            }, SHUTDOWN_TIMEOUT_MS),
+          ),
+        ]);
+      }
 
       clearInterval(cleanupInterval);
 
