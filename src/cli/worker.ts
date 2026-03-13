@@ -28,7 +28,18 @@ export const workerCommand: CliCommand = {
 
   const buffer = new BatchBuffer(config.batch.size, config.batch.intervalMs, config.batch.maxQueueSize, async (batch) => {
     await writer.write(batch);
-    // In process mode, we can't send messages to parent, just log
+    // Send metrics to parent via stdout (newline-delimited JSON)
+    const metricsMsg = {
+      type: "batch-written",
+      metrics: {
+        ...metrics.snapshot(),
+        insertRate: metrics.insertRate(),
+        bufferPending: buffer.pending,
+        queueDepth: buffer.queueDepth,
+      },
+    };
+    // Write to stdout (reserved for IPC), logs go to stderr
+    process.stdout.write(JSON.stringify(metricsMsg) + "\n");
     log.debug("Batch written, {count} rows", { count: batch.length });
   });
   buffer.start();
@@ -36,6 +47,8 @@ export const workerCommand: CliCommand = {
   const stream = new CertStreamClient(config.certstream.url, filter, buffer, metrics);
   stream.start();
 
+  // Notify parent that worker is ready
+  process.stdout.write(JSON.stringify({ type: "ready" }) + "\n");
   log.info("Ingest worker ready");
 
   // Handle shutdown

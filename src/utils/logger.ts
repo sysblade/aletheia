@@ -1,4 +1,4 @@
-import { configure, getConsoleSink, getLogger, parseLogLevel } from "@logtape/logtape";
+import { configure, getLogger, parseLogLevel } from "@logtape/logtape";
 import type { LogLevel, Sink } from "@logtape/logtape";
 
 const VALID_LEVELS: ReadonlySet<string> = new Set(["trace", "debug", "info", "warning", "error", "fatal"]);
@@ -14,18 +14,22 @@ function resolveLogLevel(): LogLevel {
 /**
  * Create console sink with process role prefix.
  * Formats logs as: [ROLE] timestamp LEVEL category message
+ * Writes to stderr to keep stdout clean for IPC messages.
  */
 function createRoleConsoleSink(role: string): Sink {
-  const baseSink = getConsoleSink();
   const rolePrefix = `[${role.toUpperCase()}] `;
 
   return (record) => {
-    // Add role prefix by modifying the record
-    const modifiedRecord = {
-      ...record,
-      message: [rolePrefix, ...record.message],
-    };
-    return baseSink(modifiedRecord);
+    // Format: [ROLE] timestamp LEVEL category message
+    const timestamp = new Date(record.timestamp).toISOString();
+    const level = record.level.toUpperCase().padEnd(7);
+    const category = record.category.join("·");
+    const message = record.message.map(m => String(m)).join(" ");
+
+    const line = `${rolePrefix}${timestamp} ${level} ${category} ${message}\n`;
+
+    // Write to stderr to keep stdout clean for IPC
+    process.stderr.write(line);
   };
 }
 

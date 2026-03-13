@@ -102,10 +102,58 @@ export const serveCommand: CliCommand = {
       log.info("Running in compiled mode, spawning worker process");
       workerProc = Bun.spawn({
         cmd: [process.execPath, "worker"],
-        stdout: "inherit",
+        stdout: "pipe",
         stderr: "inherit",
         env: process.env,
       });
+
+      // Read stdout for IPC messages (newline-delimited JSON)
+      if (workerProc.stdout && typeof workerProc.stdout !== "number") {
+        const reader = workerProc.stdout.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        async function readStdout() {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (line.trim()) {
+                try {
+                  const msg = JSON.parse(line) as WorkerMessage;
+                  switch (msg.type) {
+                    case "ready":
+                      log.info("Ingest worker ready");
+                      break;
+                    case "batch-written":
+                      metricsStore.update(msg.metrics);
+                      certEvents.emit([]);
+                      break;
+                    case "error":
+                      log.error("Ingest worker error: {message}", { message: msg.message });
+                      break;
+                  }
+                } catch (err) {
+                  log.warn("Failed to parse IPC message from worker: {error}", { error: String(err), line });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          if (err instanceof Error && err.message !== "Reader has been released") {
+            log.error("Error reading worker IPC stream: {error}", { error: String(err) });
+          }
+        }
+      }
+
+        readStdout();
+      }
 
       // Monitor process exit
       workerProc.exited.then((code) => {
