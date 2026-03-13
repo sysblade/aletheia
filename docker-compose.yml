@@ -1,0 +1,115 @@
+# Default (SQLite):
+#   docker compose up
+#
+# With MongoDB:
+#   STORE_TYPE=mongodb docker compose --profile mongodb up
+#
+# With ClickHouse:
+#   STORE_TYPE=clickhouse docker compose --profile clickhouse up
+
+services:
+
+  # ── Aletheia ────────────────────────────────────────────────────────────────
+  aletheia:
+    build: .
+    image: aletheia:local
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - aletheia-data:/app/data
+    environment:
+      STORE_TYPE: ${STORE_TYPE:-sqlite}
+
+      # SQLite
+      DB_PATH: /app/data/aletheia.sqlite
+      DB_RETENTION_DAYS: ${DB_RETENTION_DAYS:-90}
+      DB_MAINTENANCE_INTERVAL_HOURS: ${DB_MAINTENANCE_INTERVAL_HOURS:-6}
+
+      # MongoDB — points at the mongodb service when running under --profile mongodb
+      MONGO_URL: mongodb://mongodb:27017
+      MONGO_DATABASE: ${MONGO_DATABASE:-aletheia}
+      MONGO_SOCKET_TIMEOUT_MS: ${MONGO_SOCKET_TIMEOUT_MS:-15000}
+      MONGO_MAX_POOL_SIZE: ${MONGO_MAX_POOL_SIZE:-10}
+      MONGO_MIN_POOL_SIZE: ${MONGO_MIN_POOL_SIZE:-2}
+      MONGO_MAX_IDLE_TIME_MS: ${MONGO_MAX_IDLE_TIME_MS:-300000}
+
+      # ClickHouse — points at the clickhouse service when running under --profile clickhouse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-aletheia}
+      CLICKHOUSE_USERNAME: ${CLICKHOUSE_USERNAME:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_REQUEST_TIMEOUT_MS: ${CLICKHOUSE_REQUEST_TIMEOUT_MS:-30000}
+
+      # Ingestor
+      CERTSTREAM_URL: ${CERTSTREAM_URL:-wss://api.certstream.dev/}
+      BATCH_SIZE: ${BATCH_SIZE:-500}
+      BATCH_INTERVAL: ${BATCH_INTERVAL:-3000}
+      BATCH_MAX_QUEUE_SIZE: ${BATCH_MAX_QUEUE_SIZE:-50}
+
+      # Filters
+      FILTER_DOMAINS: ${FILTER_DOMAINS:-}
+      FILTER_ISSUERS: ${FILTER_ISSUERS:-}
+
+      # Server
+      HOST: "0.0.0.0"
+      PORT: "3000"
+
+      # Stats
+      STATS_ENABLED: ${STATS_ENABLED:-true}
+      STATS_HOURLY_SCHEDULE: ${STATS_HOURLY_SCHEDULE:-5 * * * *}
+      STATS_DAILY_SCHEDULE: ${STATS_DAILY_SCHEDULE:-5 0 * * *}
+
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+        required: false
+      clickhouse:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  # ── MongoDB ─────────────────────────────────────────────────────────────────
+  # Start with: docker compose --profile mongodb up
+  mongodb:
+    image: mongo:8
+    profiles: [mongodb]
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── ClickHouse ───────────────────────────────────────────────────────────────
+  # Start with: docker compose --profile clickhouse up
+  clickhouse:
+    image: clickhouse/clickhouse-server:25
+    profiles: [clickhouse]
+    environment:
+      # Creates the database and default user on first boot
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-aletheia}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USERNAME:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  aletheia-data:
+  mongo-data:
+  clickhouse-data:

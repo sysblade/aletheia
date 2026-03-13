@@ -76,31 +76,16 @@ export class BatchBuffer {
     this.items = [];
 
     try {
-      // Add batch to queue and wait for it to process.
-      // Retry up to 3 times with backoff; drop the batch after that to avoid
-      // an infinite accumulation loop on permanent failures.
       await this.queue.add(async () => {
-        const MAX_ATTEMPTS = 3;
-        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-          try {
-            await this.flushCallback(batch);
-            return;
-          } catch (err) {
-            if (attempt === MAX_ATTEMPTS) {
-              log.error("Batch write failed after {attempts} attempts, dropping {batchSize} items: {error}", {
-                error: err,
-                attempts: MAX_ATTEMPTS,
-                batchSize: batch.length,
-              });
-              return;
-            }
-            log.warn("Batch write failed (attempt {attempt}/{maxAttempts}), retrying: {error}", {
-              error: err,
-              attempt,
-              maxAttempts: MAX_ATTEMPTS,
-            });
-            await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
-          }
+        try {
+          await this.flushCallback(batch);
+        } catch (err) {
+          log.warn("Batch write failed, re-queuing {batchSize} items: {error}", {
+            error: err,
+            batchSize: batch.length,
+          });
+          // Re-queue failed items at the front so they are retried first
+          this.items = [...batch, ...this.items];
         }
       });
     } finally {

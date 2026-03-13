@@ -45,3 +45,5 @@ Defined in `src/index.ts` via Commander, implemented in `src/cli/`:
   - Log level configurable via `LOG_LEVEL` env var (trace/debug/info/warning/error/fatal, default: info)
   - All loggers use hierarchical `["aletheia", ...]` categories
   - `configureLogging()` must be called once at startup before any logging
+- Always write or update tests for the updated codes
+- Always run all test after the batch of change and style check
