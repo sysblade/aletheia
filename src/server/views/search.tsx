@@ -91,6 +91,25 @@ export function SearchGuide() {
           <p class="text-gray-600 mt-1">At least one positive term required per group.</p>
         </Section>
 
+        <Section title="Date filters — after: / before:">
+          <Row label="Certs seen after a date (inclusive):">
+            <Ex q="letsencrypt after:2024-06-01" />
+          </Row>
+          <Row label="Certs seen before a date (exclusive):">
+            <Ex q="domain:mycompany.com before:2024-01-01" />
+          </Row>
+          <Row label="Time window (both combined):">
+            <Ex q="issuer:DigiCert after:2024-01-01 before:2025-01-01" />
+          </Row>
+          <Row label="Full ISO timestamp:">
+            <Ex q="staging after:2024-06-01T00:00:00Z" />
+          </Row>
+          <p class="text-gray-600 mt-1">
+            Dates are UTC midnight. Timestamps are Unix seconds or ISO 8601.
+            Date filters apply across all OR groups.
+          </p>
+        </Section>
+
         <Section title="Practical CT monitoring examples">
           <Row label="Typosquatting watch:">
             <Ex q="domain:paypa OR domain:paypall OR domain:paypa1" />
@@ -103,6 +122,9 @@ export function SearchGuide() {
           </Row>
           <Row label="Phishing prep detection:">
             <Ex q="domain:google -google.com OR domain:facebook -facebook.com" />
+          </Row>
+          <Row label="Recent certs for a domain:">
+            <Ex q={`domain:mycompany.com after:${new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10)}`} />
           </Row>
         </Section>
 

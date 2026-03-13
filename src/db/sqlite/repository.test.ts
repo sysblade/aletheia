@@ -201,6 +201,45 @@ describe("SqliteRepository", () => {
     test("throws SearchError when group has only negated terms", async () => {
       await expect(repo.search("-onlyneg", { page: 1, limit: 50 })).rejects.toThrow();
     });
+
+    test("after: filter excludes certs seen before the timestamp", async () => {
+      const past = makeCert({ domains: ["datefilter-past.example.com"], seenAt: 1000000000 });
+      const recent = makeCert({ domains: ["datefilter-recent.example.com"], seenAt: 2000000000 });
+      await repo.insertBatch([past, recent]);
+      const result = await repo.search("datefilter after:1500000000", { page: 1, limit: 50 });
+      expect(result.total).toBe(1);
+      expect(result.certificates[0]!.fingerprint).toBe(recent.fingerprint);
+    });
+
+    test("before: filter excludes certs seen after the timestamp", async () => {
+      const past = makeCert({ domains: ["datefilter2-past.example.com"], seenAt: 1000000000 });
+      const recent = makeCert({ domains: ["datefilter2-recent.example.com"], seenAt: 2000000000 });
+      await repo.insertBatch([past, recent]);
+      const result = await repo.search("datefilter2 before:1500000000", { page: 1, limit: 50 });
+      expect(result.total).toBe(1);
+      expect(result.certificates[0]!.fingerprint).toBe(past.fingerprint);
+    });
+
+    test("after: and before: together form a window", async () => {
+      const early = makeCert({ domains: ["datewindow.example.com"], seenAt: 1000000000 });
+      const mid = makeCert({ domains: ["datewindow.example.com"], seenAt: 1500000000 });
+      const late = makeCert({ domains: ["datewindow.example.com"], seenAt: 2000000000 });
+      await repo.insertBatch([early, mid, late]);
+      const result = await repo.search("datewindow after:1200000000 before:1800000000", { page: 1, limit: 50 });
+      expect(result.total).toBe(1);
+      expect(result.certificates[0]!.fingerprint).toBe(mid.fingerprint);
+    });
+
+    test("after: accepts YYYY-MM-DD date string", async () => {
+      // 2001-09-09T01:46:40Z = Unix 1000000000
+      const past = makeCert({ domains: ["datestr-past.example.com"], seenAt: 1000000000 });
+      const recent = makeCert({ domains: ["datestr-recent.example.com"], seenAt: 2000000000 });
+      await repo.insertBatch([past, recent]);
+      // 2033-05-18 is past seenAt=2000000000 but after seenAt=1000000000
+      const result = await repo.search("datestr after:2001-09-10", { page: 1, limit: 50 });
+      expect(result.total).toBe(1);
+      expect(result.certificates[0]!.fingerprint).toBe(recent.fingerprint);
+    });
   });
 
   describe("getStats", () => {

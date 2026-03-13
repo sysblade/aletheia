@@ -154,10 +154,18 @@ export class MongoRepository implements CertificateRepository {
 
     try {
       const groupFilters = parsed.groups.map(groupFilter);
-      const filter: Filter<CertificateDocument> =
+      let filter: Filter<CertificateDocument> =
         groupFilters.length === 1
           ? (groupFilters[0] as Filter<CertificateDocument>)
           : ({ $or: groupFilters } as Filter<CertificateDocument>);
+
+      const { dateFilter } = parsed;
+      if (dateFilter.after !== undefined || dateFilter.before !== undefined) {
+        const seenAtRange: Record<string, number> = {};
+        if (dateFilter.after !== undefined) seenAtRange.$gte = dateFilter.after;
+        if (dateFilter.before !== undefined) seenAtRange.$lt = dateFilter.before;
+        filter = { $and: [filter, { seenAt: seenAtRange }] } as Filter<CertificateDocument>;
+      }
 
       const [total, docs] = await Promise.all([
         this.certs.countDocuments(filter),

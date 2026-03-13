@@ -171,10 +171,15 @@ export class SqliteRepository implements CertificateRepository {
     const matchExpr =
       groupExprs.length === 1 ? groupExprs[0]! : groupExprs.map((e) => `(${e})`).join(" OR ");
 
+    const { dateFilter } = parsed;
+    const afterCond = dateFilter.after !== undefined ? sql`AND c.seen_at >= ${dateFilter.after}` : sql``;
+    const beforeCond = dateFilter.before !== undefined ? sql`AND c.seen_at < ${dateFilter.before}` : sql``;
+
     try {
       const countResult = await sql<{ cnt: number }>`
-        SELECT COUNT(*) as cnt FROM certificates
-        WHERE id IN (SELECT rowid FROM certificates_fts WHERE certificates_fts MATCH ${matchExpr})
+        SELECT COUNT(*) as cnt FROM certificates c
+        WHERE c.id IN (SELECT rowid FROM certificates_fts WHERE certificates_fts MATCH ${matchExpr})
+        ${afterCond} ${beforeCond}
       `.execute(this.db);
 
       const total = countResult.rows[0]?.cnt ?? 0;
@@ -186,6 +191,7 @@ export class SqliteRepository implements CertificateRepository {
       const rows = await sql<CertificateRow>`
         SELECT c.* FROM certificates c
         WHERE c.id IN (SELECT rowid FROM certificates_fts WHERE certificates_fts MATCH ${matchExpr})
+        ${afterCond} ${beforeCond}
         ORDER BY c.seen_at DESC
         LIMIT ${limit} OFFSET ${offset}
       `.execute(this.db);

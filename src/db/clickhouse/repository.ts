@@ -178,8 +178,18 @@ export class ClickHouseRepository implements CertificateRepository {
     };
 
     const groupExprs = parsed.groups.map(groupExpr);
-    const whereClause =
+    let whereClause =
       groupExprs.length === 1 ? groupExprs[0]! : groupExprs.map((e) => `(${e})`).join(" OR ");
+
+    const { dateFilter } = parsed;
+    if (dateFilter.after !== undefined) {
+      params.ts_after = dateFilter.after;
+      whereClause += ` AND seenAt >= {ts_after:Int64}`;
+    }
+    if (dateFilter.before !== undefined) {
+      params.ts_before = dateFilter.before;
+      whereClause += ` AND seenAt < {ts_before:Int64}`;
+    }
 
     try {
       const [countResult, rowsResult] = await Promise.all([
