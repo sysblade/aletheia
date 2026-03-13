@@ -13,7 +13,7 @@ if (!parentPort) throw new Error("worker.ts must run inside a Worker thread");
 
 const port = parentPort;
 
-await configureLogging();
+await configureLogging("worker");
 
 const log = getLogger(["ctlog", "ingest-worker"]);
 const config = workerData as Config;

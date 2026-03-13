@@ -1,5 +1,5 @@
 import { configure, getConsoleSink, getLogger, parseLogLevel } from "@logtape/logtape";
-import type { LogLevel } from "@logtape/logtape";
+import type { LogLevel, Sink } from "@logtape/logtape";
 
 const VALID_LEVELS: ReadonlySet<string> = new Set(["trace", "debug", "info", "warning", "error", "fatal"]);
 
@@ -12,14 +12,34 @@ function resolveLogLevel(): LogLevel {
 }
 
 /**
+ * Create console sink with process role prefix.
+ * Formats logs as: [ROLE] timestamp LEVEL category message
+ */
+function createRoleConsoleSink(role: string): Sink {
+  const baseSink = getConsoleSink();
+  const rolePrefix = `[${role.toUpperCase()}] `;
+
+  return (record) => {
+    // Add role prefix by modifying the record
+    const modifiedRecord = {
+      ...record,
+      message: [rolePrefix, ...record.message],
+    };
+    return baseSink(modifiedRecord);
+  };
+}
+
+/**
  * Configure LogTape logging with console sink and LOG_LEVEL environment variable.
  * Must be called once at application startup before any logging occurs.
+ *
+ * @param role - Process role identifier (command name or "main") for log prefixing
  */
-export async function configureLogging(): Promise<void> {
+export async function configureLogging(role: string = "main"): Promise<void> {
   const level = resolveLogLevel();
   await configure({
     sinks: {
-      console: getConsoleSink(),
+      console: createRoleConsoleSink(role),
     },
     loggers: [
       {

@@ -5,7 +5,9 @@ import { migrateCommand } from "./cli/migrate.ts";
 import { workerCommand } from "./cli/worker.ts";
 import { maintenanceCommand } from "./cli/maintenance.ts";
 
-await configureLogging();
+// Use command name as log role (defaults to "main" when no command specified)
+const role = process.argv[2] || "main";
+await configureLogging(role);
 
 const commands = new Map([
   [serveCommand.name, serveCommand],
