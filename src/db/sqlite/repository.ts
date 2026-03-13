@@ -3,9 +3,10 @@ import type { Kysely } from "kysely";
 import { SearchError, type CertificateRepository } from "../repository.ts";
 import { parseSearchQuery } from "../search-query.ts";
 import type { SearchTerm } from "../search-query.ts";
-import type { Certificate, ExportBatch, NewCertificate, SearchOpts, SearchResult, Stats } from "../../types/certificate.ts";
-import type { Database, CertificateRow } from "./schema.ts";
+import type { Certificate, DailyStats, ExportBatch, HourlyStats, NewCertificate, SearchOpts, SearchResult, Stats, TopEntry } from "../../types/certificate.ts";
+import type { Database, CertificateRow, DailyStatsRow, HourlyStatsRow } from "./schema.ts";
 import { getLogger } from "../../utils/logger.ts";
+import { extractTwoLevelDomain, isWildcardDomain } from "../../utils/domain.ts";
 
 const log = getLogger(["ctlog", "sqlite", "repository"]);
 
@@ -39,6 +40,49 @@ function rowToCertificate(row: CertificateRow): Certificate {
     certLink: row.cert_link,
     seenAt: row.seen_at,
     createdAt: row.created_at,
+  };
+}
+
+function parseTopEntries(raw: string): TopEntry[] {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    log.warn("Failed to parse top entries JSON, raw starts with {preview}", { preview: raw.slice(0, 100) });
+    return [];
+  }
+}
+
+function rowToHourlyStats(row: HourlyStatsRow): HourlyStats {
+  return {
+    id: row.id,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    totalCertificates: row.total_certificates,
+    uniqueDomains: row.unique_domains,
+    uniqueIssuers: row.unique_issuers,
+    wildcardCount: row.wildcard_count,
+    avgSanCount: row.avg_san_count,
+    topDomains: parseTopEntries(row.top_domains),
+    topIssuers: parseTopEntries(row.top_issuers),
+    computedAt: row.computed_at,
+  };
+}
+
+function rowToDailyStats(row: DailyStatsRow): DailyStats {
+  return {
+    id: row.id,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    totalCertificates: row.total_certificates,
+    uniqueDomains: row.unique_domains,
+    uniqueIssuers: row.unique_issuers,
+    wildcardCount: row.wildcard_count,
+    avgSanCount: row.avg_san_count,
+    peakHourlyRate: row.peak_hourly_rate,
+    topDomains: parseTopEntries(row.top_domains),
+    topIssuers: parseTopEntries(row.top_issuers),
+    computedAt: row.computed_at,
   };
 }
 
@@ -260,6 +304,207 @@ export class SqliteRepository implements CertificateRepository {
     const nextCursor = rows.length < limit ? null : rows[rows.length - 1]!.id;
 
     return { certificates, cursor: nextCursor };
+  }
+
+  async getHourlyStats(fromTimestamp: number, toTimestamp: number): Promise<HourlyStats[]> {
+    const rows = await this.db
+      .selectFrom("hourly_stats")
+      .selectAll()
+      .where("period_start", ">=", fromTimestamp)
+      .where("period_start", "<", toTimestamp)
+      .orderBy("period_start", "asc")
+      .execute();
+
+    return rows.map(rowToHourlyStats);
+  }
+
+  async getDailyStats(fromTimestamp: number, toTimestamp: number): Promise<DailyStats[]> {
+    const rows = await this.db
+      .selectFrom("daily_stats")
+      .selectAll()
+      .where("period_start", ">=", fromTimestamp)
+      .where("period_start", "<", toTimestamp)
+      .orderBy("period_start", "asc")
+      .execute();
+
+    return rows.map(rowToDailyStats);
+  }
+
+  async computeStatsForPeriod(periodStart: number, granularity: "hourly" | "daily"): Promise<void> {
+    const periodEnd = periodStart + (granularity === "hourly" ? 3600 : 86400);
+
+    log.debug("Computing {granularity} stats for period {start} to {end}", {
+      granularity,
+      start: periodStart,
+      end: periodEnd,
+    });
+
+    // Use SQL aggregation for simple stats (memory efficient)
+    const basicStats = await sql<{
+      total: number;
+      total_domain_count: number;
+    }>`
+      SELECT
+        COUNT(*) as total,
+        SUM(domain_count) as total_domain_count
+      FROM certificates
+      WHERE seen_at >= ${periodStart} AND seen_at < ${periodEnd}
+    `.execute(this.db);
+
+    const totalCertificates = basicStats.rows[0]?.total ?? 0;
+
+    if (totalCertificates === 0) {
+      log.debug("No certificates in period, skipping stats computation");
+      return;
+    }
+
+    const totalDomainCount = basicStats.rows[0]?.total_domain_count ?? 0;
+    const avgSanCount = totalDomainCount / totalCertificates;
+
+    // Get issuer counts using SQL (memory efficient)
+    const issuerRows = await sql<{ issuer: string; count: number }>`
+      SELECT issuer_org as issuer, COUNT(*) as count
+      FROM certificates
+      WHERE seen_at >= ${periodStart} AND seen_at < ${periodEnd}
+        AND issuer_org IS NOT NULL
+      GROUP BY issuer_org
+      ORDER BY count DESC
+      LIMIT 100
+    `.execute(this.db);
+
+    const issuerCounts = new Map(issuerRows.rows.map((r) => [r.issuer, r.count]));
+    const uniqueIssuers = issuerCounts.size;
+
+    // Build top issuers list
+    const topIssuers: TopEntry[] = issuerRows.rows.map((r) => ({
+      value: r.issuer,
+      count: r.count,
+    }));
+
+    // Stream process certificates in batches for domain extraction
+    // This is the memory-intensive part due to JSON parsing and PSL lookups
+    // BATCH_SIZE of 5000 balances memory usage (~50-100MB per batch) with performance
+    // Reduce to 1000-2000 for very memory-constrained environments
+    const BATCH_SIZE = 5000;
+    const twoLevelDomainCounts = new Map<string, number>();
+    let wildcardCount = 0;
+    let lastId = 0;
+    let processedCount = 0;
+
+    while (true) {
+      const batch = await this.db
+        .selectFrom("certificates")
+        .select(["id", "domains"])
+        .where("seen_at", ">=", periodStart)
+        .where("seen_at", "<", periodEnd)
+        .where("id", ">", lastId)
+        .orderBy("id", "asc")
+        .limit(BATCH_SIZE)
+        .execute();
+
+      if (batch.length === 0) break;
+
+      // Process batch in memory
+      for (const cert of batch) {
+        const domains = parseDomains(cert.domains);
+
+        // Count wildcards
+        if (domains.some(isWildcardDomain)) {
+          wildcardCount++;
+        }
+
+        // Extract and count 2-level domains
+        for (const domain of domains) {
+          const twoLevel = extractTwoLevelDomain(domain);
+          if (twoLevel) {
+            twoLevelDomainCounts.set(twoLevel, (twoLevelDomainCounts.get(twoLevel) ?? 0) + 1);
+          }
+        }
+      }
+
+      lastId = batch[batch.length - 1]!.id;
+      processedCount += batch.length;
+
+      // Log progress for large periods
+      if (totalCertificates > 10000 && processedCount % 10000 === 0) {
+        log.debug("Domain extraction progress: {processed}/{total} certificates", {
+          processed: processedCount,
+          total: totalCertificates,
+        });
+      }
+
+      // Break if we processed fewer than batch size (last batch)
+      if (batch.length < BATCH_SIZE) break;
+    }
+
+    const uniqueDomains = twoLevelDomainCounts.size;
+
+    // Build top 100 domains
+    const topDomains = Array.from(twoLevelDomainCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 100)
+      .map(([value, count]) => ({ value, count }));
+
+    // topIssuers was already built from SQL query above
+
+    if (granularity === "hourly") {
+      // Store hourly stats
+      await sql`
+        REPLACE INTO hourly_stats (
+          period_start, period_end, total_certificates, unique_domains,
+          unique_issuers, wildcard_count, avg_san_count, top_domains, top_issuers
+        ) VALUES (
+          ${periodStart}, ${periodEnd}, ${totalCertificates}, ${uniqueDomains},
+          ${uniqueIssuers}, ${wildcardCount}, ${avgSanCount},
+          ${JSON.stringify(topDomains)}, ${JSON.stringify(topIssuers)}
+        )
+      `.execute(this.db);
+
+      log.debug("Stored hourly stats for period {start}", {
+        start: periodStart,
+        total: totalCertificates,
+        uniqueDomains,
+      });
+    } else {
+      // For daily stats, compute peak hourly rate
+      const peakHourlyRate = await this.computePeakHourlyRate(periodStart, periodEnd);
+
+      await sql`
+        REPLACE INTO daily_stats (
+          period_start, period_end, total_certificates, unique_domains,
+          unique_issuers, wildcard_count, avg_san_count, peak_hourly_rate,
+          top_domains, top_issuers
+        ) VALUES (
+          ${periodStart}, ${periodEnd}, ${totalCertificates}, ${uniqueDomains},
+          ${uniqueIssuers}, ${wildcardCount}, ${avgSanCount}, ${peakHourlyRate},
+          ${JSON.stringify(topDomains)}, ${JSON.stringify(topIssuers)}
+        )
+      `.execute(this.db);
+
+      log.debug("Stored daily stats for period {start}", {
+        start: periodStart,
+        total: totalCertificates,
+        uniqueDomains,
+        peakHourlyRate,
+      });
+    }
+  }
+
+  private async computePeakHourlyRate(dayStart: number, dayEnd: number): Promise<number> {
+    // Query each hour in the day to find the peak
+    const result = await sql<{ max_hourly: number }>`
+      SELECT MAX(hourly_count) as max_hourly
+      FROM (
+        SELECT
+          CAST((seen_at - ${dayStart}) / 3600 AS INTEGER) as hour_bucket,
+          COUNT(*) as hourly_count
+        FROM certificates
+        WHERE seen_at >= ${dayStart} AND seen_at < ${dayEnd}
+        GROUP BY hour_bucket
+      )
+    `.execute(this.db);
+
+    return result.rows[0]?.max_hourly ?? 0;
   }
 
   async close(): Promise<void> {

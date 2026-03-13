@@ -32,3 +32,46 @@ export interface CounterDocument {
   _id: string;
   seq: number;
 }
+
+/**
+ * Top entry in aggregated lists (domains or issuers).
+ */
+export interface TopEntryDocument {
+  value: string;
+  count: number;
+}
+
+/**
+ * Hourly aggregated statistics document.
+ */
+export interface HourlyStatsDocument {
+  _id: ObjectId;
+  periodStart: number;
+  periodEnd: number;
+  totalCertificates: number;
+  uniqueDomains: number;
+  uniqueIssuers: number;
+  wildcardCount: number;
+  avgSanCount: number;
+  topDomains: TopEntryDocument[];
+  topIssuers: TopEntryDocument[];
+  computedAt: number;
+}
+
+/**
+ * Daily aggregated statistics document.
+ */
+export interface DailyStatsDocument {
+  _id: ObjectId;
+  periodStart: number;
+  periodEnd: number;
+  totalCertificates: number;
+  uniqueDomains: number;
+  uniqueIssuers: number;
+  wildcardCount: number;
+  avgSanCount: number;
+  peakHourlyRate: number;
+  topDomains: TopEntryDocument[];
+  topIssuers: TopEntryDocument[];
+  computedAt: number;
+}

@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import type { Subprocess } from "bun";
+import { Cron } from "croner";
 import type { CliCommand } from "./router.ts";
 import { loadConfig } from "../config.ts";
 import { getLogger } from "../utils/logger.ts";
@@ -57,6 +58,31 @@ export const serveCommand: CliCommand = {
           log.info("Database maintenance process completed successfully");
         } else {
           log.error("Database maintenance process exited with code {code}", { code });
+        }
+      });
+    }
+
+    // Helper function to spawn stats computation process
+    function spawnStats(reason: string) {
+      if (!config.stats.enabled) return;
+
+      const execPath = isCompiled ? process.execPath : "bun";
+      const args = isCompiled ? ["stats"] : ["run", "src/index.ts", "stats"];
+
+      log.info("Spawning stats computation ({reason})", { reason });
+
+      const statsProc = Bun.spawn({
+        cmd: [execPath, ...args],
+        stdout: "inherit",
+        stderr: "inherit",
+        env: process.env,
+      });
+
+      statsProc.exited.then((code) => {
+        if (code === 0) {
+          log.info("Stats computation completed successfully");
+        } else {
+          log.error("Stats computation failed with code {code}", { code });
         }
       });
     }
@@ -150,6 +176,26 @@ export const serveCommand: CliCommand = {
       spawnMaintenance("scheduled");
     }, config.db.maintenanceIntervalHours * 60 * 60 * 1000);
 
+    // Schedule stats computation
+    const hourlyStatsCron = config.stats.enabled
+      ? new Cron(config.stats.hourlySchedule, () => {
+          spawnStats("hourly");
+        })
+      : null;
+
+    const dailyStatsCron = config.stats.enabled
+      ? new Cron(config.stats.dailySchedule, () => {
+          spawnStats("daily");
+        })
+      : null;
+
+    if (config.stats.enabled) {
+      log.info("Stats computation enabled, hourly: {hourly}, daily: {daily}", {
+        hourly: config.stats.hourlySchedule,
+        daily: config.stats.dailySchedule,
+      });
+    }
+
     const server = Bun.serve({
       fetch: app.fetch,
       port: config.server.port,
@@ -192,6 +238,9 @@ export const serveCommand: CliCommand = {
 
       clearInterval(cleanupInterval);
       clearInterval(maintenanceInterval);
+
+      if (hourlyStatsCron) hourlyStatsCron.stop();
+      if (dailyStatsCron) dailyStatsCron.stop();
 
       server.stop();
       log.info("Server stopped");

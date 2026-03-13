@@ -33,10 +33,49 @@ export interface CertificatesFtsTable {
   subject_cn: string;
 }
 
+/**
+ * Hourly aggregated statistics table.
+ * Stores pre-computed hourly metrics and top-N lists as JSON.
+ */
+export interface HourlyStatsTable {
+  id: Generated<number>;
+  period_start: number;
+  period_end: number;
+  total_certificates: number;
+  unique_domains: number;
+  unique_issuers: number;
+  wildcard_count: number;
+  avg_san_count: number;
+  top_domains: string;
+  top_issuers: string;
+  computed_at: ColumnType<number, number | undefined, never>;
+}
+
+/**
+ * Daily aggregated statistics table.
+ * Stores pre-computed daily metrics and top-N lists as JSON.
+ */
+export interface DailyStatsTable {
+  id: Generated<number>;
+  period_start: number;
+  period_end: number;
+  total_certificates: number;
+  unique_domains: number;
+  unique_issuers: number;
+  wildcard_count: number;
+  avg_san_count: number;
+  peak_hourly_rate: number;
+  top_domains: string;
+  top_issuers: string;
+  computed_at: ColumnType<number, number | undefined, never>;
+}
+
 /** Kysely database schema definition. */
 export interface Database {
   certificates: CertificatesTable;
   certificates_fts: CertificatesFtsTable;
+  hourly_stats: HourlyStatsTable;
+  daily_stats: DailyStatsTable;
 }
 
 /** Certificate row as selected from database. */
@@ -44,3 +83,15 @@ export type CertificateRow = Selectable<CertificatesTable>;
 
 /** Certificate row for insertion (omits generated fields). */
 export type NewCertificateRow = Insertable<CertificatesTable>;
+
+/** Hourly stats row as selected from database. */
+export type HourlyStatsRow = Selectable<HourlyStatsTable>;
+
+/** Hourly stats row for insertion (omits generated fields). */
+export type NewHourlyStatsRow = Insertable<HourlyStatsTable>;
+
+/** Daily stats row as selected from database. */
+export type DailyStatsRow = Selectable<DailyStatsTable>;
+
+/** Daily stats row for insertion (omits generated fields). */
+export type NewDailyStatsRow = Insertable<DailyStatsTable>;

@@ -6,6 +6,8 @@ import { ResultsTable } from "../views/components/results-table.tsx";
 import { CertDetail } from "../views/components/cert-detail.tsx";
 import { LiveStreamRows, LiveStreamTable } from "../views/components/live-stream.tsx";
 import { Layout } from "../views/layout.tsx";
+import { StatsPage, StatsContent } from "../views/stats/stats-page.tsx";
+import type { TopEntry } from "../../types/certificate.ts";
 
 const LIVE_STREAM_LIMIT = 25;
 
@@ -119,6 +121,24 @@ uiRoutes.get("/partials/stats", async (c) => {
   );
 });
 
+uiRoutes.get("/stats", async (c) => {
+  const repo = c.get("repository");
+  const range = (c.req.query("range") || "24h") as "24h" | "7d" | "30d";
+
+  const data = await fetchStatsData(repo, range);
+
+  return c.html(<StatsPage range={range} data={data} />);
+});
+
+uiRoutes.get("/partials/stats-content", async (c) => {
+  const repo = c.get("repository");
+  const range = (c.req.query("range") || "24h") as "24h" | "7d" | "30d";
+
+  const data = await fetchStatsData(repo, range);
+
+  return c.html(<StatsContent range={range} data={data} />);
+});
+
 uiRoutes.get("/events/live-stream", async (c) => {
   const repo = c.get("repository");
   const certEvents = c.get("certEvents");
@@ -149,3 +169,56 @@ uiRoutes.get("/events/live-stream", async (c) => {
     }
   });
 });
+
+async function fetchStatsData(repo: AppEnv["Variables"]["repository"], range: "24h" | "7d" | "30d") {
+  const now = Math.floor(Date.now() / 1000);
+  const rangeSeconds = range === "24h" ? 86400 : range === "7d" ? 604800 : 2592000;
+  const fromTimestamp = now - rangeSeconds;
+
+  const [hourlyStats, dailyStats] = await Promise.all([
+    range === "24h" ? repo.getHourlyStats(fromTimestamp, now) : Promise.resolve([]),
+    range !== "24h" ? repo.getDailyStats(fromTimestamp, now) : Promise.resolve([]),
+  ]);
+
+  const useHourly = range === "24h";
+  const stats = useHourly ? hourlyStats : dailyStats;
+
+  const totalCertificates = stats.reduce((sum, s) => sum + s.totalCertificates, 0);
+  const wildcardCount = stats.reduce((sum, s) => sum + s.wildcardCount, 0);
+
+  const domainCounts = new Map<string, number>();
+  const issuerCounts = new Map<string, number>();
+
+  for (const stat of stats) {
+    for (const entry of stat.topDomains) {
+      domainCounts.set(entry.value, (domainCounts.get(entry.value) ?? 0) + entry.count);
+    }
+    for (const entry of stat.topIssuers) {
+      issuerCounts.set(entry.value, (issuerCounts.get(entry.value) ?? 0) + entry.count);
+    }
+  }
+
+  const topDomains: TopEntry[] = Array.from(domainCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 100)
+    .map(([value, count]) => ({ value, count }));
+
+  const topIssuers: TopEntry[] = Array.from(issuerCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 100)
+    .map(([value, count]) => ({ value, count }));
+
+  const uniqueDomains = domainCounts.size;
+  const uniqueIssuers = issuerCounts.size;
+
+  return {
+    hourlyStats,
+    dailyStats,
+    totalCertificates,
+    uniqueDomains,
+    uniqueIssuers,
+    wildcardCount,
+    topDomains,
+    topIssuers,
+  };
+}

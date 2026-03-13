@@ -78,3 +78,36 @@ export interface ExportBatch {
   certificates: Certificate[];
   cursor: number | null;
 }
+
+/**
+ * Entry in top-N aggregated lists (domains or issuers).
+ */
+export interface TopEntry {
+  value: string;
+  count: number;
+}
+
+/**
+ * Hourly aggregated statistics.
+ */
+export interface HourlyStats {
+  id: number;
+  periodStart: number;
+  periodEnd: number;
+  totalCertificates: number;
+  uniqueDomains: number;
+  uniqueIssuers: number;
+  wildcardCount: number;
+  avgSanCount: number;
+  topDomains: TopEntry[];
+  topIssuers: TopEntry[];
+  computedAt: number;
+}
+
+/**
+ * Daily aggregated statistics.
+ * Extends HourlyStats with peak hourly rate metric.
+ */
+export interface DailyStats extends HourlyStats {
+  peakHourlyRate: number;
+}

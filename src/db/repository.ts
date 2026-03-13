@@ -1,4 +1,4 @@
-import type { Certificate, ExportBatch, NewCertificate, SearchOpts, SearchResult, Stats } from "../types/certificate.ts";
+import type { Certificate, DailyStats, ExportBatch, HourlyStats, NewCertificate, SearchOpts, SearchResult, Stats } from "../types/certificate.ts";
 
 /**
  * User-friendly error thrown when search query parsing or execution fails.
@@ -39,6 +39,15 @@ export interface CertificateRepository {
 
   /** Export certificates in batches for data migration. Uses cursor-based pagination. */
   exportBatch(cursor: number | null, limit: number): Promise<ExportBatch>;
+
+  /** Get hourly stats for a time range. Returns empty array if no data. */
+  getHourlyStats(fromTimestamp: number, toTimestamp: number): Promise<HourlyStats[]>;
+
+  /** Get daily stats for a time range. Returns empty array if no data. */
+  getDailyStats(fromTimestamp: number, toTimestamp: number): Promise<DailyStats[]>;
+
+  /** Compute and store stats for specified period. Overwrites existing stats. */
+  computeStatsForPeriod(periodStart: number, granularity: "hourly" | "daily"): Promise<void>;
 
   /** Close database connection and run final cleanup. */
   close(): Promise<void>;

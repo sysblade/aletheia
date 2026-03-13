@@ -6,15 +6,18 @@
       "name": "ctlog",
       "dependencies": {
         "@logtape/logtape": "^0.12.0",
+        "croner": "^10.0.1",
         "hono": "^4.7.0",
         "kysely": "^0.27.0",
         "kysely-bun-sqlite": "^0.3.0",
         "mongodb": "^6.12.0",
         "p-queue": "^9.1.0",
+        "psl": "^1.15.0",
         "ws": "^8.18.0",
       },
       "devDependencies": {
         "@types/bun": "latest",
+        "@types/psl": "^1.1.3",
         "@types/ws": "^8.5.0",
       },
       "peerDependencies": {
@@ -31,6 +34,8 @@
 
     "@types/node": ["@types/node@25.5.0", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-jp2P3tQMSxWugkCUKLRPVUpGaL5MVFwF8RDuSRztfwgN1wmqJeMSbKlnEtQqU8UrhTmzEmZdu2I6v2dpp7XIxw=="],
 
+    "@types/psl": ["@types/psl@1.11.0", "", { "dependencies": { "psl": "*" } }, "sha512-OeASqmnreaSJyxwljqCZjRIf7jpbwswaqbSPahE99PZrizNAOXEl9HRWhXvCt3fkAc/WuF8wcZ6zkDHXaE7X4g=="],
+
     "@types/webidl-conversions": ["@types/webidl-conversions@7.0.3", "", {}, "sha512-CiJJvcRtIgzadHCYXw7dqEnMNRjhGZlYK05Mj9OyktqV8uVT8fD2BFOB7S1uwBE3Kj2Z+4UyPmFw/Ixgw/LAlA=="],
 
     "@types/whatwg-url": ["@types/whatwg-url@11.0.5", "", { "dependencies": { "@types/webidl-conversions": "*" } }, "sha512-coYR071JRaHa+xoEvvYqvnIHaVqaYrLPbsufM9BF63HkwI5Lgmy2QR8Q5K/lYDYo5AK82wOvSOS0UsLTpTG7uQ=="],
@@ -40,6 +45,8 @@
     "bson": ["bson@6.10.4", "", {}, "sha512-WIsKqkSC0ABoBJuT1LEX+2HEvNmNKKgnTAyd0fL8qzK4SH2i9NXg+t08YtdZp/V9IZ33cxe3iV4yM0qg8lMQng=="],
 
     "bun-types": ["bun-types@1.3.10", "", { "dependencies": { "@types/node": "*" } }, "sha512-tcpfCCl6XWo6nCVnpcVrxQ+9AYN1iqMIzgrSKYMB/fjLtV2eyAVEg7AxQJuCq/26R6HpKWykQXuSOq/21RYcbg=="],
+
+    "croner": ["croner@10.0.1", "", {}, "sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g=="],
 
     "eventemitter3": ["eventemitter3@5.0.4", "", {}, "sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw=="],
 
@@ -58,6 +65,8 @@
     "p-queue": ["p-queue@9.1.0", "", { "dependencies": { "eventemitter3": "^5.0.1", "p-timeout": "^7.0.0" } }, "sha512-O/ZPaXuQV29uSLbxWBGGZO1mCQXV2BLIwUr59JUU9SoH76mnYvtms7aafH/isNSNGwuEfP6W/4xD0/TJXxrizw=="],
 
     "p-timeout": ["p-timeout@7.0.1", "", {}, "sha512-AxTM2wDGORHGEkPCt8yqxOTMgpfbEHqF51f/5fJCmwFC3C/zNcGT63SymH2ttOAaiIws2zVg4+izQCjrakcwHg=="],
+
+    "psl": ["psl@1.15.0", "", { "dependencies": { "punycode": "^2.3.1" } }, "sha512-JZd3gMVBAVQkSs6HdNZo9Sdo0LNcQeMNP3CozBJb3JYC/QUYZTnKxP+f8oWRX4rHP5EurWxqAHTSwUCjlNKa1w=="],
 
     "punycode": ["punycode@2.3.1", "", {}, "sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg=="],
 

@@ -30,6 +30,7 @@ export interface Config {
   batch: { size: number; intervalMs: number; maxQueueSize: number };
   server: { port: number; host: string };
   filters: { domains: string[]; issuers: string[] };
+  stats: { enabled: boolean; hourlySchedule: string; dailySchedule: string };
 }
 
 /**
@@ -65,6 +66,11 @@ export function loadConfig(): Config {
     filters: {
       domains: parseList(process.env.FILTER_DOMAINS),
       issuers: parseList(process.env.FILTER_ISSUERS),
+    },
+    stats: {
+      enabled: process.env.STATS_ENABLED !== "false",
+      hourlySchedule: process.env.STATS_HOURLY_SCHEDULE || "5 * * * *",
+      dailySchedule: process.env.STATS_DAILY_SCHEDULE || "5 0 * * *",
     },
   };
 }
