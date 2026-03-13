@@ -85,5 +85,11 @@ export const workerCommand: CliCommand = {
 
   process.on("SIGINT", () => void shutdown());
   process.on("SIGTERM", () => void shutdown());
+  process.on("uncaughtException", (err) => {
+    log.error("Uncaught exception in worker: {error}", { error: err });
+  });
+  process.on("unhandledRejection", (reason) => {
+    log.error("Unhandled rejection in worker: {error}", { error: reason });
+  });
   },
 };

@@ -43,7 +43,9 @@ export class BatchBuffer {
 
   start() {
     this.timer = setInterval(() => {
-      void this.flush();
+      this.flush().catch((err) => {
+        log.error("Unhandled flush error: {error}", { error: err });
+      });
     }, this.intervalMs);
   }
 
@@ -74,17 +76,31 @@ export class BatchBuffer {
     this.items = [];
 
     try {
-      // Add batch to queue and wait for it to process
+      // Add batch to queue and wait for it to process.
+      // Retry up to 3 times with backoff; drop the batch after that to avoid
+      // an infinite accumulation loop on permanent failures.
       await this.queue.add(async () => {
-        try {
-          await this.flushCallback(batch);
-        } catch (err) {
-          log.error("Batch write failed, re-queuing {batchSize} items: {error}", {
-            error: String(err),
-            batchSize: batch.length,
-          });
-          // Re-queue failed batch by adding back to items at front
-          this.items = batch.concat(this.items);
+        const MAX_ATTEMPTS = 3;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            await this.flushCallback(batch);
+            return;
+          } catch (err) {
+            if (attempt === MAX_ATTEMPTS) {
+              log.error("Batch write failed after {attempts} attempts, dropping {batchSize} items: {error}", {
+                error: err,
+                attempts: MAX_ATTEMPTS,
+                batchSize: batch.length,
+              });
+              return;
+            }
+            log.warn("Batch write failed (attempt {attempt}/{maxAttempts}), retrying: {error}", {
+              error: err,
+              attempt,
+              maxAttempts: MAX_ATTEMPTS,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+          }
         }
       });
     } finally {

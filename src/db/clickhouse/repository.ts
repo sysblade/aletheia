@@ -69,8 +69,8 @@ function rowToDailyStats(row: DailyStatsRow): DailyStats {
   };
 }
 
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function escapeLike(str: string): string {
+  return str.replace(/[%_\\]/g, "\\$&");
 }
 
 /**
@@ -140,7 +140,7 @@ export class ClickHouseRepository implements CertificateRepository {
       return newCerts.length;
     } catch (err) {
       log.error("Batch insert failed with {error}, batch had {batchSize} certs", {
-        error: String(err),
+        error: err,
         batchSize: certs.length,
       });
       throw err;
@@ -168,20 +168,21 @@ export class ClickHouseRepository implements CertificateRepository {
     };
 
     const termExpr = (term: SearchTerm): string => {
-      const pattern = addParam(escapeRegex(term.text));
+      // Use LIKE '%…%' rather than match() so the ngrambf_v1 skip indexes can prune granules.
+      const pattern = addParam(`%${escapeLike(term.text)}%`);
       let expr: string;
       switch (term.column) {
         case "domain":
-          expr = `arrayExists(x -> match(x, ${pattern}), domains)`;
+          expr = `arrayExists(x -> x LIKE ${pattern}, domains)`;
           break;
         case "issuer":
-          expr = `match(coalesce(issuerOrg, ''), ${pattern})`;
+          expr = `coalesce(issuerOrg, '') LIKE ${pattern}`;
           break;
         case "cn":
-          expr = `match(coalesce(subjectCn, ''), ${pattern})`;
+          expr = `coalesce(subjectCn, '') LIKE ${pattern}`;
           break;
         default:
-          expr = `(arrayExists(x -> match(x, ${pattern}), domains) OR match(coalesce(issuerOrg, ''), ${pattern}) OR match(coalesce(subjectCn, ''), ${pattern}))`;
+          expr = `(arrayExists(x -> x LIKE ${pattern}, domains) OR coalesce(issuerOrg, '') LIKE ${pattern} OR coalesce(subjectCn, '') LIKE ${pattern})`;
       }
       return term.negate ? `NOT (${expr})` : expr;
     };
@@ -241,7 +242,7 @@ export class ClickHouseRepository implements CertificateRepository {
     } catch (err) {
       if (err instanceof SearchError) throw err;
       log.error("Search query failed with {error} for query {query}", {
-        error: String(err),
+        error: err,
         query,
       });
       throw new SearchError("Search failed. Try a different query.");

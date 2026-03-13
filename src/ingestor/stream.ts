@@ -70,18 +70,22 @@ export class CertStreamClient {
     });
 
     this.ws.on("message", (data: WebSocket.RawData) => {
-      const message = data.toString();
-      const cert = parseCertStreamMessage(message);
-      if (!cert) return;
+      try {
+        const message = data.toString();
+        const cert = parseCertStreamMessage(message);
+        if (!cert) return;
 
-      this.metrics.increment("certsReceived");
+        this.metrics.increment("certsReceived");
 
-      if (!this.filter.matches(cert)) {
-        this.metrics.increment("certsFiltered");
-        return;
+        if (!this.filter.matches(cert)) {
+          this.metrics.increment("certsFiltered");
+          return;
+        }
+
+        this.buffer.push(cert);
+      } catch (err) {
+        log.error("Message handler error: {error}", { error: err });
       }
-
-      this.buffer.push(cert);
     });
 
     this.ws.on("error", (err: Error) => {

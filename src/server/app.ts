@@ -77,7 +77,7 @@ export function createApp(deps: AppDeps) {
     if (err instanceof SearchError) {
       return c.json({ error: err.message }, 400);
     }
-    log.error("Unhandled error on {path}: {error}", { error: String(err), path: c.req.path });
+    log.error("Unhandled error on {path}: {error}", { error: err, path: c.req.path });
     return c.json({ error: "Internal server error" }, 500);
   });
 

@@ -16,6 +16,13 @@ const port = parentPort;
 await configureLogging("worker");
 
 const log = getLogger(["aletheia", "ingest-worker"]);
+
+process.on("uncaughtException", (err) => {
+  log.error("Uncaught exception in worker: {error}", { error: err });
+});
+process.on("unhandledRejection", (reason) => {
+  log.error("Unhandled rejection in worker: {error}", { error: reason });
+});
 const config = workerData as Config;
 
 log.info("Ingest worker starting with store {storeType}", { storeType: config.store.type });

@@ -275,6 +275,11 @@ export const serveCommand: CliCommand = {
       fetch: app.fetch,
       port: config.server.port,
       hostname: config.server.host,
+      idleTimeout: 60,
+      error(err) {
+        log.error("Unhandled server error: {error}", { error: err });
+        return new Response("Internal Server Error", { status: 500 });
+      },
     });
 
     log.info("Server listening on {host}:{port}", { host: config.server.host, port: config.server.port });
@@ -330,5 +335,11 @@ export const serveCommand: CliCommand = {
 
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
+    process.on("uncaughtException", (err) => {
+      log.error("Uncaught exception: {error}", { error: err });
+    });
+    process.on("unhandledRejection", (reason) => {
+      log.error("Unhandled rejection: {error}", { error: reason });
+    });
   },
 };

@@ -61,12 +61,31 @@ async function ensureTables(client: ClickHouseClient): Promise<void> {
         certIndex    Nullable(Int64),
         certLink     Nullable(String),
         seenAt       Int64,
-        createdAt    Int64
+        createdAt    Int64,
+        INDEX domains_ngram  domains   TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4,
+        INDEX issuer_ngram   issuerOrg TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4,
+        INDEX subject_ngram  subjectCn TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4
       ) ENGINE = ReplacingMergeTree(createdAt)
       ORDER BY fingerprint
       SETTINGS index_granularity = 8192
     `,
   });
+
+  // Add skip indexes to existing tables (IF NOT EXISTS supported since ClickHouse 22.11).
+  // Safe to run repeatedly; silently ignored if index already exists.
+  for (const [name, col, type] of [
+    ["domains_ngram",  "domains",   "ngrambf_v1(4, 65536, 3, 0)"],
+    ["issuer_ngram",   "issuerOrg", "ngrambf_v1(4, 65536, 3, 0)"],
+    ["subject_ngram",  "subjectCn", "ngrambf_v1(4, 65536, 3, 0)"],
+  ] as const) {
+    try {
+      await client.command({
+        query: `ALTER TABLE certificates ADD INDEX IF NOT EXISTS ${name} ${col} TYPE ${type} GRANULARITY 4`,
+      });
+    } catch {
+      // Already exists on older ClickHouse versions that don't support IF NOT EXISTS
+    }
+  }
 
   await client.command({
     query: `

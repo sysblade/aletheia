@@ -16,6 +16,14 @@ function resolveLogLevel(): LogLevel {
  * Formats logs as: [ROLE] timestamp LEVEL category message
  * Writes to stderr to keep stdout clean for IPC messages.
  */
+/** Render a single message fragment, expanding Error objects to their stack trace. */
+function renderFragment(value: unknown): string {
+  if (value instanceof Error) {
+    return value.stack ?? `${value.name}: ${value.message}`;
+  }
+  return String(value);
+}
+
 function createRoleConsoleSink(role: string): Sink {
   const rolePrefix = `[${role.toUpperCase()}] `;
 
@@ -24,7 +32,9 @@ function createRoleConsoleSink(role: string): Sink {
     const timestamp = new Date(record.timestamp).toISOString();
     const level = record.level.toUpperCase().padEnd(7);
     const category = record.category.join("·");
-    const message = record.message.map(m => String(m)).join(" ");
+    // record.message is interleaved [literal, value, literal, value, …].
+    // renderFragment handles Error values so callers can pass errors directly.
+    const message = record.message.map(renderFragment).join("");
 
     const line = `${rolePrefix}${timestamp} ${level} ${category} ${message}\n`;
 
