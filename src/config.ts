@@ -27,7 +27,7 @@ export interface Config {
   db: { path: string; retentionDays: number; maintenanceIntervalHours: number };
   mongo: { url: string; database: string };
   certstream: { url: string };
-  batch: { size: number; intervalMs: number };
+  batch: { size: number; intervalMs: number; maxQueueSize: number };
   server: { port: number; host: string };
   filters: { domains: string[]; issuers: string[] };
 }
@@ -56,6 +56,7 @@ export function loadConfig(): Config {
     batch: {
       size: Number(process.env.BATCH_SIZE) || 500,
       intervalMs: Number(process.env.BATCH_INTERVAL) || 3000,
+      maxQueueSize: Number(process.env.BATCH_MAX_QUEUE_SIZE) || 50,
     },
     server: {
       port: Number(process.env.PORT) || 3000,

@@ -5,13 +5,13 @@ import { makeCert } from "../test-fixtures.ts";
 describe("BatchBuffer", () => {
   let buffer: BatchBuffer;
 
-  afterEach(() => {
-    buffer?.stop();
+  afterEach(async () => {
+    await buffer?.stop();
   });
 
   test("push increments pending", () => {
     const callback = mock(() => Promise.resolve());
-    buffer = new BatchBuffer(100, 60_000, callback);
+    buffer = new BatchBuffer(100, 60_000, 10, callback);
     expect(buffer.pending).toBe(0);
     buffer.push(makeCert());
     expect(buffer.pending).toBe(1);
@@ -21,7 +21,7 @@ describe("BatchBuffer", () => {
 
   test("flush calls callback and resets pending to 0", async () => {
     const callback = mock(() => Promise.resolve());
-    buffer = new BatchBuffer(100, 60_000, callback);
+    buffer = new BatchBuffer(100, 60_000, 10, callback);
     buffer.push(makeCert());
     buffer.push(makeCert());
     await buffer.flush();
@@ -32,14 +32,14 @@ describe("BatchBuffer", () => {
 
   test("empty flush is a no-op", async () => {
     const callback = mock(() => Promise.resolve());
-    buffer = new BatchBuffer(100, 60_000, callback);
+    buffer = new BatchBuffer(100, 60_000, 10, callback);
     await buffer.flush();
     expect(callback).not.toHaveBeenCalled();
   });
 
   test("size threshold triggers automatic flush", async () => {
     const callback = mock(() => Promise.resolve());
-    buffer = new BatchBuffer(3, 60_000, callback);
+    buffer = new BatchBuffer(3, 60_000, 10, callback);
     buffer.push(makeCert());
     buffer.push(makeCert());
     expect(callback).not.toHaveBeenCalled();
@@ -56,7 +56,7 @@ describe("BatchBuffer", () => {
       callCount++;
       if (callCount === 1) throw new Error("fail");
     });
-    buffer = new BatchBuffer(100, 60_000, callback);
+    buffer = new BatchBuffer(100, 60_000, 10, callback);
     const cert1 = makeCert();
     const cert2 = makeCert();
     buffer.push(cert1);
@@ -81,7 +81,7 @@ describe("BatchBuffer", () => {
     const callback = mock(
       () => new Promise<void>((r) => { resolveFlush = r; }),
     );
-    buffer = new BatchBuffer(100, 60_000, callback);
+    buffer = new BatchBuffer(100, 60_000, 10, callback);
     buffer.push(makeCert());
     buffer.push(makeCert());
 
@@ -100,7 +100,7 @@ describe("BatchBuffer", () => {
 
   test("start/stop manages interval", async () => {
     const callback = mock(() => Promise.resolve());
-    buffer = new BatchBuffer(100, 50, callback);
+    buffer = new BatchBuffer(100, 50, 10, callback);
     buffer.push(makeCert());
     buffer.start();
     await new Promise((r) => setTimeout(r, 120));

@@ -10,10 +10,11 @@ export interface Metrics {
   startedAt: number;
 }
 
-/** Metrics snapshot with derived values (rate, buffer size). */
+/** Metrics snapshot with derived values (rate, buffer size, queue depth). */
 export interface MetricsSnapshot extends Metrics {
   insertRate: number;
   bufferPending: number;
+  queueDepth: number;
 }
 
 /** Read-only metrics interface for exposing metrics to web server. */
@@ -21,6 +22,7 @@ export interface MetricsReader {
   snapshot(): Readonly<Metrics>;
   insertRate(): number;
   bufferPending(): number;
+  queueDepth(): number;
 }
 
 const RATE_WINDOW_MS = 60_000;
@@ -85,6 +87,10 @@ export class MetricsCollector implements MetricsReader {
   bufferPending(): number {
     return 0;
   }
+
+  queueDepth(): number {
+    return 0;
+  }
 }
 
 /**
@@ -95,12 +101,14 @@ export class MetricsStore implements MetricsReader {
   private data: Metrics = zeroMetrics();
   private rate = 0;
   private pending = 0;
+  private queue = 0;
 
   update(snap: MetricsSnapshot): void {
-    const { insertRate, bufferPending, ...base } = snap;
+    const { insertRate, bufferPending, queueDepth, ...base } = snap;
     this.data = base;
     this.rate = insertRate;
     this.pending = bufferPending;
+    this.queue = queueDepth;
   }
 
   snapshot(): Readonly<Metrics> {
@@ -113,5 +121,9 @@ export class MetricsStore implements MetricsReader {
 
   bufferPending(): number {
     return this.pending;
+  }
+
+  queueDepth(): number {
+    return this.queue;
   }
 }

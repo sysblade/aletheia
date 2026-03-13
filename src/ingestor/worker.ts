@@ -25,7 +25,7 @@ const metrics = new MetricsCollector();
 const filter = new CertFilter(config.filters.domains, config.filters.issuers);
 const writer = new BatchWriter(repository, metrics);
 
-const buffer = new BatchBuffer(config.batch.size, config.batch.intervalMs, async (batch) => {
+const buffer = new BatchBuffer(config.batch.size, config.batch.intervalMs, config.batch.maxQueueSize, async (batch) => {
   await writer.write(batch);
   port.postMessage({
     type: "batch-written",
@@ -33,6 +33,7 @@ const buffer = new BatchBuffer(config.batch.size, config.batch.intervalMs, async
       ...metrics.snapshot(),
       insertRate: metrics.insertRate(),
       bufferPending: buffer.pending,
+      queueDepth: buffer.queueDepth,
     },
   } satisfies WorkerMessage);
 });
@@ -47,8 +48,7 @@ port.on("message", async (msg: MainMessage) => {
   if (msg.type === "shutdown") {
     log.info("Shutdown signal received");
     stream.stop();
-    buffer.stop();
-    await buffer.flush();
+    await buffer.stop();
     await repository.close();
     port.postMessage({ type: "stopped" } satisfies WorkerMessage);
     log.info("Ingest worker stopped");

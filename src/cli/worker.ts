@@ -26,7 +26,7 @@ export const workerCommand: CliCommand = {
   const filter = new CertFilter(config.filters.domains, config.filters.issuers);
   const writer = new BatchWriter(repository, metrics);
 
-  const buffer = new BatchBuffer(config.batch.size, config.batch.intervalMs, async (batch) => {
+  const buffer = new BatchBuffer(config.batch.size, config.batch.intervalMs, config.batch.maxQueueSize, async (batch) => {
     await writer.write(batch);
     // In process mode, we can't send messages to parent, just log
     log.debug("Batch written, {count} rows", { count: batch.length });
@@ -42,8 +42,7 @@ export const workerCommand: CliCommand = {
   async function shutdown() {
     log.info("Shutdown signal received");
     stream.stop();
-    buffer.stop();
-    await buffer.flush();
+    await buffer.stop();
     await repository.close();
     log.info("Ingest worker stopped");
     process.exit(0);
