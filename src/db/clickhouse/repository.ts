@@ -173,7 +173,15 @@ export class ClickHouseRepository implements CertificateRepository {
       let expr: string;
       switch (term.column) {
         case "domain":
-          expr = `arrayExists(x -> x LIKE ${pattern}, domains)`;
+          if (term.text.includes(".")) {
+            // Enforce domain boundary for full domain terms: exact match or subdomain.
+            // Prevents hillphilips.com from matching a search for philips.com.
+            const exact = addParam(term.text);
+            const subdomain = addParam(`%.${escapeLike(term.text)}`);
+            expr = `arrayExists(x -> (x = ${exact} OR x LIKE ${subdomain}), domains)`;
+          } else {
+            expr = `arrayExists(x -> x LIKE ${pattern}, domains)`;
+          }
           break;
         case "issuer":
           expr = `coalesce(issuerOrg, '') LIKE ${pattern}`;

@@ -189,6 +189,31 @@ describe("SqliteRepository", () => {
       expect(result.total).toBe(2);
     });
 
+    test("domain: boundary match excludes substring-only matches", async () => {
+      // "hillboundtest.com" contains "boundtest.com" as a substring but is NOT a subdomain
+      const certExact = makeCert({ domains: ["boundtest.com"] });
+      const certSub = makeCert({ domains: ["sub.boundtest.com"] });
+      const certFalsePositive = makeCert({ domains: ["hillboundtest.com"] });
+      await repo.insertBatch([certExact, certSub, certFalsePositive]);
+      const result = await repo.search("domain:boundtest.com", { page: 1, limit: 50 });
+      const fps = result.certificates.map((c) => c.fingerprint);
+      expect(fps).toContain(certExact.fingerprint);
+      expect(fps).toContain(certSub.fingerprint);
+      expect(fps).not.toContain(certFalsePositive.fingerprint);
+    });
+
+    test("domain: boundary match works across OR groups", async () => {
+      const certA = makeCert({ domains: ["orboundA.com"] });
+      const certB = makeCert({ domains: ["sub.orboundB.com"] });
+      const certFalse = makeCert({ domains: ["notorboundA.com"] });
+      await repo.insertBatch([certA, certB, certFalse]);
+      const result = await repo.search("domain:orboundA.com OR domain:orboundB.com", { page: 1, limit: 50 });
+      const fps = result.certificates.map((c) => c.fingerprint);
+      expect(fps).toContain(certA.fingerprint);
+      expect(fps).toContain(certB.fingerprint);
+      expect(fps).not.toContain(certFalse.fingerprint);
+    });
+
     test("-term excludes matching certs", async () => {
       const certA = makeCert({ domains: ["excl-target.example.com"] });
       const certB = makeCert({ domains: ["excl-other.example.com"] });

@@ -8,18 +8,22 @@ function truncate(s: string, maxLen: number): string {
   return s.length > maxLen ? s.slice(0, maxLen) + "..." : s;
 }
 
-export function ResultsTable({ certificates, total, page, totalPages, query }: {
+export function ResultsTable({ certificates, total, page, totalPages, query, elapsedMs }: {
   certificates: Certificate[];
   total: number;
   page: number;
   totalPages: number;
   query: string;
+  elapsedMs: number;
 }) {
   if (certificates.length === 0) {
     return (
       <div class="text-center py-12 text-gray-400">
         {query.length >= 2
-          ? <p>No certificates found matching "<span class="text-green-400">{query}</span>"</p>
+          ? <>
+              <p>No certificates found matching "<span class="text-green-400">{query}</span>"</p>
+              <p class="text-gray-500 text-xs mt-1">({elapsedMs < 1 ? "<1" : Math.round(elapsedMs)}ms)</p>
+            </>
           : <p>Enter at least 2 characters to search</p>}
       </div>
     );
@@ -30,6 +34,7 @@ export function ResultsTable({ certificates, total, page, totalPages, query }: {
       <div class="text-sm text-gray-400 mb-4">
         Found <span class="text-green-400 font-bold">{total.toLocaleString()}</span> certificate(s)
         {totalPages > 1 && <span> &mdash; page {page} of {totalPages}</span>}
+        <span class="ml-2 text-gray-500">({elapsedMs < 1 ? "<1" : Math.round(elapsedMs)}ms)</span>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -76,6 +81,7 @@ export function ResultsTable({ certificates, total, page, totalPages, query }: {
           )}
           <span class="px-3 py-1 text-gray-400 text-sm">
             Page {page} / {totalPages}
+            <span class="ml-2 text-gray-500 text-xs">({elapsedMs < 1 ? "<1" : Math.round(elapsedMs)}ms)</span>
           </span>
           {page < totalPages && (
             <button

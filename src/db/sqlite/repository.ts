@@ -175,11 +175,38 @@ export class SqliteRepository implements CertificateRepository {
     const afterCond = dateFilter.after !== undefined ? sql`AND c.seen_at >= ${dateFilter.after}` : sql``;
     const beforeCond = dateFilter.before !== undefined ? sql`AND c.seen_at < ${dateFilter.before}` : sql``;
 
+    // Build domain boundary filter to prevent FTS5 trigram false positives.
+    // e.g., domain:philips.com should NOT match hillphilips.com (substring match).
+    // Uses json_each to enforce that the searched value is an exact domain or a subdomain.
+    // Only applies to terms that look like full domain names (contain a dot), since partial
+    // terms like "domain:acme" are intentional substring searches and don't need this.
+    // Only applied when every OR group has at least one full-domain term, since a group
+    // without a domain constraint cannot be boundary-filtered globally.
+    const domainGroupConds: string[] = [];
+    let allGroupsHaveFullDomainTerms = parsed.groups.length > 0;
+    for (const group of parsed.groups) {
+      const fullDomainTerms = group.filter((t) => t.column === "domain" && !t.negate && t.text.includes("."));
+      if (fullDomainTerms.length === 0) {
+        allGroupsHaveFullDomainTerms = false;
+        break;
+      }
+      const termConds = fullDomainTerms.map((t) => {
+        const safe = t.text.replace(/'/g, "''");
+        const likeSafe = safe.replace(/_/g, "\\_").replace(/%/g, "\\%");
+        return `EXISTS (SELECT 1 FROM json_each(c.domains) WHERE json_each.value = '${safe}' OR json_each.value LIKE '%.${likeSafe}' ESCAPE '\\')`;
+      });
+      domainGroupConds.push(termConds.length === 1 ? termConds[0]! : `(${termConds.join(" AND ")})`);
+    }
+    const domainBoundaryCond =
+      allGroupsHaveFullDomainTerms && domainGroupConds.length > 0
+        ? sql.raw(`AND (${domainGroupConds.join(" OR ")})`)
+        : sql``;
+
     try {
       const countResult = await sql<{ cnt: number }>`
         SELECT COUNT(*) as cnt FROM certificates c
         WHERE c.id IN (SELECT rowid FROM certificates_fts WHERE certificates_fts MATCH ${matchExpr})
-        ${afterCond} ${beforeCond}
+        ${afterCond} ${beforeCond} ${domainBoundaryCond}
       `.execute(this.db);
 
       const total = countResult.rows[0]?.cnt ?? 0;
@@ -191,7 +218,7 @@ export class SqliteRepository implements CertificateRepository {
       const rows = await sql<CertificateRow>`
         SELECT c.* FROM certificates c
         WHERE c.id IN (SELECT rowid FROM certificates_fts WHERE certificates_fts MATCH ${matchExpr})
-        ${afterCond} ${beforeCond}
+        ${afterCond} ${beforeCond} ${domainBoundaryCond}
         ORDER BY c.seen_at DESC
         LIMIT ${limit} OFFSET ${offset}
       `.execute(this.db);

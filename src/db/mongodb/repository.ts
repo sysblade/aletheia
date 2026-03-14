@@ -130,9 +130,17 @@ export class MongoRepository implements CertificateRepository {
       const pattern = escapeRegex(term.text);
       const re = { $regex: pattern, $options: "i" };
 
+      // For full domain terms (containing a dot), enforce domain boundary:
+      // match exact domain or subdomain (e.g. philips.com or *.philips.com),
+      // but NOT substring matches like hillphilips.com.
+      const domainRe =
+        term.text.includes(".")
+          ? { $regex: `(^|\\.)${pattern}$`, $options: "i" }
+          : re;
+
       if (term.negate) {
         switch (term.column) {
-          case "domain": return { domains: { $not: re } };
+          case "domain": return { domains: { $not: domainRe } };
           case "issuer": return { issuerOrg: { $not: re } };
           case "cn": return { subjectCn: { $not: re } };
           default: return { $nor: [{ domains: re }, { issuerOrg: re }, { subjectCn: re }] };
@@ -140,7 +148,7 @@ export class MongoRepository implements CertificateRepository {
       }
 
       switch (term.column) {
-        case "domain": return { domains: { $elemMatch: re } };
+        case "domain": return { domains: { $elemMatch: domainRe } };
         case "issuer": return { issuerOrg: re };
         case "cn": return { subjectCn: re };
         default: return { $or: [{ domains: { $elemMatch: re } }, { issuerOrg: re }, { subjectCn: re }] };
