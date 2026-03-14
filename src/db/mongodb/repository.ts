@@ -134,6 +134,28 @@ export class MongoRepository implements CertificateRepository {
     }
 
     function termFilter(term: SearchTerm): object {
+      // For exact match (quoted strings), use exact equality instead of regex
+      if (term.exact) {
+        const exactValue = term.text;
+
+        if (term.negate) {
+          switch (term.column) {
+            case "domain": return { domains: { $ne: exactValue } };
+            case "issuer": return { issuerOrg: { $ne: exactValue } };
+            case "cn": return { subjectCn: { $ne: exactValue } };
+            default: return { $and: [{ domains: { $ne: exactValue } }, { issuerOrg: { $ne: exactValue } }, { subjectCn: { $ne: exactValue } }] };
+          }
+        }
+
+        switch (term.column) {
+          case "domain": return { domains: exactValue };
+          case "issuer": return { issuerOrg: exactValue };
+          case "cn": return { subjectCn: exactValue };
+          default: return { $or: [{ domains: exactValue }, { issuerOrg: exactValue }, { subjectCn: exactValue }] };
+        }
+      }
+
+      // Regular substring match with regex
       const pattern = escapeRegex(term.text);
       const re = { $regex: pattern, $options: "i" };
 
@@ -174,12 +196,44 @@ export class MongoRepository implements CertificateRepository {
           ? (groupFilters[0] as Filter<CertificateDocument>)
           : ({ $or: groupFilters } as Filter<CertificateDocument>);
 
-      const { dateFilter } = parsed;
+      const { dateFilter, wildcardOnly, domainCountFilter } = parsed;
+      const additionalFilters: Filter<CertificateDocument>[] = [];
+
+      // Date filter
       if (dateFilter.after !== undefined || dateFilter.before !== undefined) {
         const seenAtRange: Record<string, number> = {};
         if (dateFilter.after !== undefined) seenAtRange.$gte = dateFilter.after;
         if (dateFilter.before !== undefined) seenAtRange.$lt = dateFilter.before;
-        filter = { $and: [filter, { seenAt: seenAtRange }] } as Filter<CertificateDocument>;
+        additionalFilters.push({ seenAt: seenAtRange } as Filter<CertificateDocument>);
+      }
+
+      // Wildcard filter: check if any domain starts with *.
+      if (wildcardOnly === true) {
+        additionalFilters.push({ domains: { $elemMatch: { $regex: "^\\*\\." } } } as Filter<CertificateDocument>);
+      } else if (wildcardOnly === false) {
+        additionalFilters.push({ domains: { $not: { $elemMatch: { $regex: "^\\*\\." } } } } as Filter<CertificateDocument>);
+      }
+
+      // Domain count filter
+      if (domainCountFilter) {
+        const op = domainCountFilter.operator;
+        const val = domainCountFilter.value;
+        if (op === ">") {
+          additionalFilters.push({ domainCount: { $gt: val } } as Filter<CertificateDocument>);
+        } else if (op === ">=") {
+          additionalFilters.push({ domainCount: { $gte: val } } as Filter<CertificateDocument>);
+        } else if (op === "<") {
+          additionalFilters.push({ domainCount: { $lt: val } } as Filter<CertificateDocument>);
+        } else if (op === "<=") {
+          additionalFilters.push({ domainCount: { $lte: val } } as Filter<CertificateDocument>);
+        } else if (op === "=") {
+          additionalFilters.push({ domainCount: val } as Filter<CertificateDocument>);
+        }
+      }
+
+      // Combine all filters
+      if (additionalFilters.length > 0) {
+        filter = { $and: [filter, ...additionalFilters] } as Filter<CertificateDocument>;
       }
 
       const [total, docs] = await Promise.all([

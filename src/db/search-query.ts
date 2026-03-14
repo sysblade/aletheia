@@ -9,10 +9,25 @@ export interface SearchTerm {
   column: SearchColumn | null;
   /** true = exclude documents matching this term (NOT operator) */
   negate: boolean;
+  /** true = exact match (text was quoted) */
+  exact: boolean;
 }
 
 /**
- * Date range filter extracted from after:/before: tokens.
+ * Numeric comparison operator for domain_count filter.
+ */
+export type NumericOperator = ">" | ">=" | "<" | "<=" | "=";
+
+/**
+ * Numeric filter for domain_count (e.g., domain_count:>5).
+ */
+export interface NumericFilter {
+  operator: NumericOperator;
+  value: number;
+}
+
+/**
+ * Date range filter extracted from after:/before:/created: tokens.
  * Both bounds are Unix timestamps (seconds).
  * after is inclusive (seen_at >= after), before is exclusive (seen_at < before).
  */
@@ -24,11 +39,13 @@ export interface DateFilter {
 /**
  * Outer array: groups joined by OR.
  * Inner array: terms within a group, combined by AND (negated terms excluded via NOT).
- * dateFilter applies globally across all OR groups.
+ * Filters apply globally across all OR groups.
  */
 export interface ParsedQuery {
   groups: SearchTerm[][];
   dateFilter: DateFilter;
+  wildcardOnly?: boolean;  // wildcard:true
+  domainCountFilter?: NumericFilter;  // domain_count:>5
 }
 
 /**
@@ -70,42 +87,123 @@ function parseGroup(segment: string): SearchTerm[] {
     }
   }
 
-  return rest
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => {
-      if (word.startsWith("-") && word.length > 1) {
-        return { text: word.slice(1), column, negate: true };
+  // Parse quoted strings and regular words
+  const terms: SearchTerm[] = [];
+  let pos = 0;
+
+  while (pos < rest.length) {
+    // Skip whitespace
+    while (pos < rest.length && /\s/.test(rest[pos]!)) pos++;
+    if (pos >= rest.length) break;
+
+    let negate = false;
+    if (rest[pos] === "-") {
+      negate = true;
+      pos++;
+      // Skip whitespace after negation
+      while (pos < rest.length && /\s/.test(rest[pos]!)) pos++;
+      if (pos >= rest.length) break;
+    }
+
+    // Check for quoted string
+    const currentChar = rest[pos]!;
+    if (currentChar === '"' || currentChar === "'") {
+      const quote = currentChar;
+      pos++;
+      let text = "";
+      while (pos < rest.length && rest[pos] !== quote) {
+        const ch = rest[pos]!;
+        if (ch === "\\") {
+          pos++;
+          if (pos < rest.length) text += rest[pos]!;
+        } else {
+          text += ch;
+        }
+        pos++;
       }
-      return { text: word, column, negate: false };
-    });
+      if (pos < rest.length) pos++; // skip closing quote
+      if (text) {
+        terms.push({ text, column, negate, exact: true });
+      }
+    } else {
+      // Regular word
+      let text = "";
+      while (pos < rest.length && !/\s/.test(rest[pos]!)) {
+        text += rest[pos]!;
+        pos++;
+      }
+      if (text) {
+        terms.push({ text, column, negate, exact: false });
+      }
+    }
+  }
+
+  return terms;
 }
 
 /**
  * Parse search query string into structured query AST.
  * Supports OR groups, column prefixes (domain:, issuer:, cn:), and negation (-term).
- * Also supports global date filters: after:TIMESTAMP and before:TIMESTAMP.
+ * Also supports global filters:
+ *   - after:TIMESTAMP, before:TIMESTAMP
+ *   - created:YYYY-MM-DD..YYYY-MM-DD
+ *   - wildcard:true/false
+ *   - domain_count:>5 (supports >, >=, <, <=, =)
  * Timestamps may be a date (YYYY-MM-DD, treated as UTC midnight), a full ISO datetime,
  * or a plain Unix integer.
- * Example: "domain:example.com -test OR issuer:letsencrypt after:2024-01-15"
+ * Example: "domain:example.com -test OR issuer:letsencrypt after:2024-01-15 wildcard:true domain_count:>5"
  */
 export function parseSearchQuery(raw: string): ParsedQuery {
   const dateFilter: DateFilter = {};
+  let wildcardOnly: boolean | undefined;
+  let domainCountFilter: NumericFilter | undefined;
 
-  // Strip after:/before: tokens globally before group parsing.
-  // \b ensures we don't match mid-word (e.g. notafter:...).
-  const cleaned = raw
-    .trim()
-    .replace(/\b(after|before):(\S+)/gi, (_match, key: string, val: string) => {
-      const ts = parseTimestamp(val);
-      if (ts !== null) {
-        if (key.toLowerCase() === "after") dateFilter.after = ts;
-        else dateFilter.before = ts;
-        return "";
+  // Strip special filters globally before group parsing
+  let cleaned = raw.trim();
+
+  // Handle wildcard:true/false
+  cleaned = cleaned.replace(/\bwildcard:(true|false)\b/gi, (_match, val: string) => {
+    wildcardOnly = val.toLowerCase() === "true";
+    return "";
+  });
+
+  // Handle domain_count:>5 (supports >, >=, <, <=, =)
+  cleaned = cleaned.replace(/\bdomain_count:(>=?|<=?|=)(\d+)\b/gi, (_match, op: string, val: string) => {
+    domainCountFilter = {
+      operator: op as NumericOperator,
+      value: parseInt(val, 10),
+    };
+    return "";
+  });
+
+  // Handle created:YYYY-MM-DD..YYYY-MM-DD date range
+  cleaned = cleaned.replace(/\bcreated:(\S+)\.\.(\S+)\b/gi, (_match, start: string, end: string) => {
+    const startTs = parseTimestamp(start);
+    const endTs = parseTimestamp(end);
+    if (startTs !== null) dateFilter.after = startTs;
+    if (endTs !== null) {
+      // End date is exclusive (< not <=), so add 1 day if it's YYYY-MM-DD format
+      if (/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+        dateFilter.before = endTs + 86400; // +1 day
+      } else {
+        dateFilter.before = endTs;
       }
-      return _match;
-    })
-    .trim();
+    }
+    return "";
+  });
+
+  // Strip after:/before: tokens globally
+  cleaned = cleaned.replace(/\b(after|before):(\S+)/gi, (_match, key: string, val: string) => {
+    const ts = parseTimestamp(val);
+    if (ts !== null) {
+      if (key.toLowerCase() === "after") dateFilter.after = ts;
+      else dateFilter.before = ts;
+      return "";
+    }
+    return _match;
+  });
+
+  cleaned = cleaned.trim();
 
   const groups = cleaned
     .split(/\s+OR\s+/i)
@@ -114,5 +212,5 @@ export function parseSearchQuery(raw: string): ParsedQuery {
     .map(parseGroup)
     .filter((g) => g.length > 0);
 
-  return { groups, dateFilter };
+  return { groups, dateFilter, wildcardOnly, domainCountFilter };
 }

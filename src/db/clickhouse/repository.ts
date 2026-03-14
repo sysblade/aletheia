@@ -176,30 +176,50 @@ export class ClickHouseRepository implements CertificateRepository {
     };
 
     const termExpr = (term: SearchTerm): string => {
-      // Use LIKE '%…%' rather than match() so the ngrambf_v1 skip indexes can prune granules.
-      const pattern = addParam(`%${escapeLike(term.text)}%`);
       let expr: string;
-      switch (term.column) {
-        case "domain":
-          if (term.text.includes(".")) {
-            // Enforce domain boundary for full domain terms: exact match or subdomain.
-            // Prevents hillphilips.com from matching a search for philips.com.
-            const exact = addParam(term.text);
-            const subdomain = addParam(`%.${escapeLike(term.text)}`);
-            expr = `arrayExists(x -> (x = ${exact} OR x LIKE ${subdomain}), domains)`;
-          } else {
-            expr = `arrayExists(x -> x LIKE ${pattern}, domains)`;
-          }
-          break;
-        case "issuer":
-          expr = `coalesce(issuerOrg, '') LIKE ${pattern}`;
-          break;
-        case "cn":
-          expr = `coalesce(subjectCn, '') LIKE ${pattern}`;
-          break;
-        default:
-          expr = `(arrayExists(x -> x LIKE ${pattern}, domains) OR coalesce(issuerOrg, '') LIKE ${pattern} OR coalesce(subjectCn, '') LIKE ${pattern})`;
+
+      // Handle exact match (quoted strings)
+      if (term.exact) {
+        const exactValue = addParam(term.text);
+        switch (term.column) {
+          case "domain":
+            expr = `arrayExists(x -> x = ${exactValue}, domains)`;
+            break;
+          case "issuer":
+            expr = `coalesce(issuerOrg, '') = ${exactValue}`;
+            break;
+          case "cn":
+            expr = `coalesce(subjectCn, '') = ${exactValue}`;
+            break;
+          default:
+            expr = `(arrayExists(x -> x = ${exactValue}, domains) OR coalesce(issuerOrg, '') = ${exactValue} OR coalesce(subjectCn, '') = ${exactValue})`;
+        }
+      } else {
+        // Use LIKE '%…%' rather than match() so the ngrambf_v1 skip indexes can prune granules.
+        const pattern = addParam(`%${escapeLike(term.text)}%`);
+        switch (term.column) {
+          case "domain":
+            if (term.text.includes(".")) {
+              // Enforce domain boundary for full domain terms: exact match or subdomain.
+              // Prevents hillphilips.com from matching a search for philips.com.
+              const exact = addParam(term.text);
+              const subdomain = addParam(`%.${escapeLike(term.text)}`);
+              expr = `arrayExists(x -> (x = ${exact} OR x LIKE ${subdomain}), domains)`;
+            } else {
+              expr = `arrayExists(x -> x LIKE ${pattern}, domains)`;
+            }
+            break;
+          case "issuer":
+            expr = `coalesce(issuerOrg, '') LIKE ${pattern}`;
+            break;
+          case "cn":
+            expr = `coalesce(subjectCn, '') LIKE ${pattern}`;
+            break;
+          default:
+            expr = `(arrayExists(x -> x LIKE ${pattern}, domains) OR coalesce(issuerOrg, '') LIKE ${pattern} OR coalesce(subjectCn, '') LIKE ${pattern})`;
+        }
       }
+
       return term.negate ? `NOT (${expr})` : expr;
     };
 
@@ -216,7 +236,7 @@ export class ClickHouseRepository implements CertificateRepository {
     let whereClause =
       groupExprs.length === 1 ? groupExprs[0]! : groupExprs.map((e) => `(${e})`).join(" OR ");
 
-    const { dateFilter } = parsed;
+    const { dateFilter, wildcardOnly, domainCountFilter } = parsed;
     if (dateFilter.after !== undefined) {
       params.ts_after = dateFilter.after;
       whereClause += ` AND seenAt >= {ts_after:Int64}`;
@@ -224,6 +244,35 @@ export class ClickHouseRepository implements CertificateRepository {
     if (dateFilter.before !== undefined) {
       params.ts_before = dateFilter.before;
       whereClause += ` AND seenAt < {ts_before:Int64}`;
+    }
+
+    // Filter for wildcard certificates only
+    if (wildcardOnly === true) {
+      whereClause += ` AND arrayExists(x -> startsWith(x, '*.'), domains)`;
+    } else if (wildcardOnly === false) {
+      whereClause += ` AND NOT arrayExists(x -> startsWith(x, '*.'), domains)`;
+    }
+
+    // Filter by domain count
+    if (domainCountFilter) {
+      params.domain_count_value = domainCountFilter.value;
+      switch (domainCountFilter.operator) {
+        case ">":
+          whereClause += ` AND domainCount > {domain_count_value:UInt32}`;
+          break;
+        case ">=":
+          whereClause += ` AND domainCount >= {domain_count_value:UInt32}`;
+          break;
+        case "<":
+          whereClause += ` AND domainCount < {domain_count_value:UInt32}`;
+          break;
+        case "<=":
+          whereClause += ` AND domainCount <= {domain_count_value:UInt32}`;
+          break;
+        case "=":
+          whereClause += ` AND domainCount = {domain_count_value:UInt32}`;
+          break;
+      }
     }
 
     try {
@@ -373,7 +422,7 @@ export class ClickHouseRepository implements CertificateRepository {
     let whereClause =
       groupExprs.length === 1 ? groupExprs[0]! : groupExprs.map((e) => `(${e})`).join(" OR ");
 
-    const { dateFilter } = parsed;
+    const { dateFilter, wildcardOnly, domainCountFilter } = parsed;
     if (dateFilter.after !== undefined) {
       params.ts_after = dateFilter.after;
       whereClause += ` AND seenAt >= {ts_after:Int64}`;
@@ -381,6 +430,35 @@ export class ClickHouseRepository implements CertificateRepository {
     if (dateFilter.before !== undefined) {
       params.ts_before = dateFilter.before;
       whereClause += ` AND seenAt < {ts_before:Int64}`;
+    }
+
+    // Filter for wildcard certificates only
+    if (wildcardOnly === true) {
+      whereClause += ` AND arrayExists(x -> startsWith(x, '*.'), domains)`;
+    } else if (wildcardOnly === false) {
+      whereClause += ` AND NOT arrayExists(x -> startsWith(x, '*.'), domains)`;
+    }
+
+    // Filter by domain count
+    if (domainCountFilter) {
+      params.domain_count_value = domainCountFilter.value;
+      switch (domainCountFilter.operator) {
+        case ">":
+          whereClause += ` AND domainCount > {domain_count_value:UInt32}`;
+          break;
+        case ">=":
+          whereClause += ` AND domainCount >= {domain_count_value:UInt32}`;
+          break;
+        case "<":
+          whereClause += ` AND domainCount < {domain_count_value:UInt32}`;
+          break;
+        case "<=":
+          whereClause += ` AND domainCount <= {domain_count_value:UInt32}`;
+          break;
+        case "=":
+          whereClause += ` AND domainCount = {domain_count_value:UInt32}`;
+          break;
+      }
     }
 
     try {

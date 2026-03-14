@@ -34,7 +34,10 @@ Open http://localhost:3000
 - **Multi-backend storage**: SQLite (FTS5), MongoDB, or ClickHouse - swappable via config
 - **Full-text search**: Trigram search across domains, issuers, and subjects with streaming progress
 - **Cancellable search**: Client-initiated search cancellation with server-side query termination
-- **Advanced search syntax**: `domain:`, `issuer:`, `cn:` prefixes with glob patterns and negation (`-`)
+- **Advanced search syntax**: Exact match quotes, wildcard filters, domain count comparisons, date ranges
+- **Keyboard shortcuts**: `/` to focus search, `Esc` to cancel
+- **Search history**: Automatic LocalStorage-based search history (last 10 queries)
+- **CSV export**: Export search results to CSV from the UI
 - **Live updates**: Server-Sent Events (SSE) stream of new certificates in real-time
 - **Smart filtering**: Configurable domain glob filters and issuer substring filters
 - **Deduplication**: Automatic deduplication by SHA1 certificate fingerprint
@@ -260,10 +263,20 @@ CLICKHOUSE_URL=http://localhost:8123
 | Syntax | Example | Description |
 |--------|---------|-------------|
 | Free text | `google` | Search across domains, issuer, CN |
+| Exact match | `issuer:"Let's Encrypt"` | Exact match (use quotes) |
 | `domain:` | `domain:*.google.com` | Filter by domain |
 | `issuer:` | `issuer:Let's Encrypt` | Filter by issuer substring |
 | `cn:` | `cn:myserver` | Filter by subject common name |
 | `-` prefix | `-domain:example.com` | Negate any filter |
+| `wildcard:` | `wildcard:true` | Only wildcard certificates (*.domain) |
+| `domain_count:` | `domain_count:>10` | Filter by number of SANs (>, >=, <, <=, =) |
+| `created:` | `created:2024-01-01..2024-03-14` | Date range filter |
+| `after:` / `before:` | `after:2024-01-01` | Alternative date filters |
+
+### Keyboard Shortcuts
+
+- **`/`** - Focus search input (works from anywhere)
+- **`Esc`** - Cancel active search or blur input
 
 ## Migration
 

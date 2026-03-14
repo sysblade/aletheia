@@ -91,7 +91,15 @@ export function SearchGuide() {
           <p class="text-gray-600 mt-1">At least one positive term required per group.</p>
         </Section>
 
-        <Section title="Date filters — after: / before:">
+        <Section title="Exact match — quotes">
+          <Row label="Use quotes for exact match (no wildcards):">
+            <Ex q={`issuer:"Let's Encrypt"`} />
+            <Ex q='domain:"example.com"' />
+          </Row>
+          <p class="text-gray-600 mt-1">Without quotes, searches match substrings.</p>
+        </Section>
+
+        <Section title="Date filters — after: / before: / created:">
           <Row label="Certs seen after a date (inclusive):">
             <Ex q="letsencrypt after:2024-06-01" />
           </Row>
@@ -101,12 +109,34 @@ export function SearchGuide() {
           <Row label="Time window (both combined):">
             <Ex q="issuer:DigiCert after:2024-01-01 before:2025-01-01" />
           </Row>
+          <Row label="Date range shorthand:">
+            <Ex q="mycompany.com created:2024-01-01..2024-03-14" />
+          </Row>
           <Row label="Full ISO timestamp:">
             <Ex q="staging after:2024-06-01T00:00:00Z" />
           </Row>
           <p class="text-gray-600 mt-1">
             Dates are UTC midnight. Timestamps are Unix seconds or ISO 8601.
             Date filters apply across all OR groups.
+          </p>
+        </Section>
+
+        <Section title="Wildcard & domain count filters">
+          <Row label="Only wildcard certificates (*.domain):">
+            <Ex q="wildcard:true domain:mycompany.com" />
+          </Row>
+          <Row label="Exclude wildcard certificates:">
+            <Ex q="wildcard:false domain:mycompany.com" />
+          </Row>
+          <Row label="Certificates with many SANs:">
+            <Ex q="domain_count:>10" />
+            <Ex q="domain_count:>=50" />
+          </Row>
+          <Row label="Single-domain certificates:">
+            <Ex q="domain_count:=1" />
+          </Row>
+          <p class="text-gray-600 mt-1">
+            Useful for finding suspicious bulk certificates or targeted attacks.
           </p>
         </Section>
 

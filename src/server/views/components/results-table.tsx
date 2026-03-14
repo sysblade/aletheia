@@ -31,10 +31,49 @@ export function ResultsTable({ certificates, total, page, totalPages, query, ela
 
   return (
     <div>
-      <div class="text-sm text-gray-400 mb-4">
-        Found <span class="text-green-400 font-bold">{total.toLocaleString()}</span> certificate(s)
-        {totalPages > 1 && <span> &mdash; page {page} of {totalPages}</span>}
-        <span class="ml-2 text-gray-500">({elapsedMs < 1 ? "<1" : Math.round(elapsedMs)}ms)</span>
+      <div class="flex justify-between items-center text-sm text-gray-400 mb-4">
+        <div>
+          Found <span class="text-green-400 font-bold">{total.toLocaleString()}</span> certificate(s)
+          {totalPages > 1 && <span> &mdash; page {page} of {totalPages}</span>}
+          <span class="ml-2 text-gray-500">({elapsedMs < 1 ? "<1" : Math.round(elapsedMs)}ms)</span>
+        </div>
+        <button
+          class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors"
+          onclick={`(function(){
+            var rows=[${JSON.stringify(["Fingerprint", "Domains", "Domain Count", "Issuer Org", "Issuer CN", "Subject CN", "Not Before", "Not After", "Serial Number", "Log Name", "Seen At"])}];
+            var certs=${JSON.stringify(certificates)};
+            certs.forEach(function(c){
+              rows.push([
+                c.fingerprint,
+                c.domains.join('; '),
+                c.domainCount,
+                c.issuerOrg||'',
+                c.issuerCn||'',
+                c.subjectCn||'',
+                new Date(c.notBefore*1000).toISOString(),
+                new Date(c.notAfter*1000).toISOString(),
+                c.serialNumber,
+                c.logName||'',
+                new Date(c.seenAt*1000).toISOString()
+              ]);
+            });
+            var csv=rows.map(function(row){
+              return row.map(function(v){
+                var s=String(v).replace(/"/g,'""');
+                return /[",\\n\\r]/.test(s)?'"'+s+'"':s;
+              }).join(',');
+            }).join('\\n');
+            var blob=new Blob([csv],{type:'text/csv'});
+            var url=URL.createObjectURL(blob);
+            var a=document.createElement('a');
+            a.href=url;
+            a.download='certificates-${query.replace(/[^a-zA-Z0-9]/g, "_")}-page${page}.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+          })()`}
+        >
+          Export CSV
+        </button>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">

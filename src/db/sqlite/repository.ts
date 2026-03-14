@@ -155,6 +155,8 @@ export class SqliteRepository implements CertificateRepository {
     function termPhrase(t: SearchTerm): string {
       const safe = t.text.replace(/\0/g, "").replace(/"/g, '""');
       const col = t.column ? `${FTS_COL[t.column]}:` : "";
+      // For exact match, FTS5 still uses quoted phrase but we'll post-filter
+      // FTS5 doesn't have a built-in exact match operator
       return `${col}"${safe}"`;
     }
 
@@ -176,9 +178,31 @@ export class SqliteRepository implements CertificateRepository {
     const matchExpr =
       groupExprs.length === 1 ? groupExprs[0]! : groupExprs.map((e) => `(${e})`).join(" OR ");
 
-    const { dateFilter } = parsed;
+    const { dateFilter, wildcardOnly, domainCountFilter } = parsed;
     const afterCond = dateFilter.after !== undefined ? sql`AND c.seen_at >= ${dateFilter.after}` : sql``;
     const beforeCond = dateFilter.before !== undefined ? sql`AND c.seen_at < ${dateFilter.before}` : sql``;
+
+    // Wildcard filter: check if any domain starts with *.
+    const wildcardCond =
+      wildcardOnly === true
+        ? sql`AND EXISTS (SELECT 1 FROM json_each(c.domains) WHERE json_each.value LIKE '\\_%.%' ESCAPE '\\')`
+        : wildcardOnly === false
+        ? sql`AND NOT EXISTS (SELECT 1 FROM json_each(c.domains) WHERE json_each.value LIKE '\\_%.%' ESCAPE '\\')`
+        : sql``;
+
+    // Domain count filter
+    const domainCountCond =
+      domainCountFilter?.operator === ">"
+        ? sql`AND c.domain_count > ${domainCountFilter.value}`
+        : domainCountFilter?.operator === ">="
+        ? sql`AND c.domain_count >= ${domainCountFilter.value}`
+        : domainCountFilter?.operator === "<"
+        ? sql`AND c.domain_count < ${domainCountFilter.value}`
+        : domainCountFilter?.operator === "<="
+        ? sql`AND c.domain_count <= ${domainCountFilter.value}`
+        : domainCountFilter?.operator === "="
+        ? sql`AND c.domain_count = ${domainCountFilter.value}`
+        : sql``;
 
     // Build domain boundary filter to prevent FTS5 trigram false positives.
     // e.g., domain:philips.com should NOT match hillphilips.com (substring match).
@@ -212,7 +236,7 @@ export class SqliteRepository implements CertificateRepository {
       const countResult = await sql<{ cnt: number }>`
         SELECT COUNT(*) as cnt FROM certificates c
         WHERE c.id IN (SELECT rowid FROM certificates_fts WHERE certificates_fts MATCH ${matchExpr})
-        ${afterCond} ${beforeCond} ${domainBoundaryCond}
+        ${afterCond} ${beforeCond} ${wildcardCond} ${domainCountCond} ${domainBoundaryCond}
       `.execute(this.db);
 
       // Check abort after count completes
@@ -235,7 +259,7 @@ export class SqliteRepository implements CertificateRepository {
       const rows = await sql<CertificateRow>`
         SELECT c.* FROM certificates c
         WHERE c.id IN (SELECT rowid FROM certificates_fts WHERE certificates_fts MATCH ${matchExpr})
-        ${afterCond} ${beforeCond} ${domainBoundaryCond}
+        ${afterCond} ${beforeCond} ${wildcardCond} ${domainCountCond} ${domainBoundaryCond}
         ORDER BY c.seen_at DESC
         LIMIT ${limit} OFFSET ${offset}
       `.execute(this.db);

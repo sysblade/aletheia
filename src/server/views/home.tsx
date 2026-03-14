@@ -150,6 +150,56 @@ export function HomePage({
       startSearch(inp.value.trim(),pg);
     }
   });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown',function(e){
+    // / key - focus search input
+    if(e.key==='/'&&document.activeElement!==document.getElementById('search-input')){
+      e.preventDefault();
+      var inp=document.getElementById('search-input');
+      if(inp){
+        inp.focus();
+        inp.select();
+      }
+    }
+    // Escape key - cancel search or blur input
+    if(e.key==='Escape'){
+      if(es){
+        cancelSearch();
+        var rd=document.getElementById('search-results');
+        if(rd)rd.innerHTML='<div class="text-center py-12 text-yellow-400">Search cancelled</div>';
+      }else{
+        var inp=document.getElementById('search-input');
+        if(inp&&document.activeElement===inp){
+          inp.blur();
+        }
+      }
+    }
+  });
+
+  // Search history using LocalStorage
+  function saveToHistory(query){
+    try{
+      var hist=JSON.parse(localStorage.getItem('searchHistory')||'[]');
+      hist=hist.filter(function(q){return q!==query;});
+      hist.unshift(query);
+      hist=hist.slice(0,10); // Keep last 10
+      localStorage.setItem('searchHistory',JSON.stringify(hist));
+    }catch(e){}
+  }
+
+  function getHistory(){
+    try{
+      return JSON.parse(localStorage.getItem('searchHistory')||'[]');
+    }catch(e){return[];}
+  }
+
+  // Override startSearch to save to history
+  var originalStartSearch=startSearch;
+  startSearch=function(q,page){
+    saveToHistory(q);
+    originalStartSearch(q,page);
+  };
 })();`,
         }}
       />
