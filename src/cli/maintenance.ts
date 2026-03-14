@@ -23,7 +23,7 @@ export const maintenanceCommand: CliCommand = {
       const t0 = performance.now();
       await repository.maintenance();
       const elapsedMs = performance.now() - t0;
-      log.info("Database maintenance completed successfully in {elapsedMs}", { elapsedMs: elapsedMs });
+      log.info("Database maintenance completed successfully in {elapsedMs}s", { elapsedMs: Math.round(Number(elapsedMs) / 1_000) });
 
     } catch (err) {
       log.error("Database maintenance failed: {error}", { error: err });
