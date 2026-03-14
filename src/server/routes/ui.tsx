@@ -8,6 +8,7 @@ import { LiveStreamRows, LiveStreamTable } from "../views/components/live-stream
 import { Layout } from "../views/layout.tsx";
 import { StatsPage, StatsContent } from "../views/stats/stats-page.tsx";
 import type { TopEntry } from "../../types/certificate.ts";
+import { SearchCancelledError } from "../../db/repository.ts";
 import { getLogger } from "../../utils/logger.ts";
 
 const LIVE_STREAM_LIMIT = 25;
@@ -53,8 +54,14 @@ uiRoutes.get("/search/results", async (c) => {
     );
   }
 
+  // Create AbortController tied to request lifecycle
+  const abortController = new AbortController();
+  c.req.raw.signal?.addEventListener('abort', () => {
+    abortController.abort();
+  });
+
   const t0 = performance.now();
-  const result = await repo.search(q, { page, limit: 50 });
+  const result = await repo.search(q, { page, limit: 50 }, abortController.signal);
   const elapsedMs = performance.now() - t0;
 
   const pushUrl = page === 1 ? `/?q=${encodeURIComponent(q)}` : `/?q=${encodeURIComponent(q)}&page=${page}`;
@@ -90,16 +97,28 @@ uiRoutes.get("/search/stream", async (c) => {
   c.header("HX-Push-Url", pushUrl);
 
   return streamSSE(c, async (stream) => {
+    // Create AbortController for this search
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+
+    // Set up abort listener for client disconnect
+    stream.onAbort(() => {
+      log.debug("Client disconnected, aborting search for query {query}", { query: q });
+      abortController.abort();
+    });
+
     try {
       const t0 = performance.now();
 
       if (repo.searchWithProgress) {
         const result = await repo.searchWithProgress(q, { page, limit: 50 }, async (p) => {
+          // Don't send progress if already aborted
+          if (signal.aborted) return;
           await stream.writeSSE({
             event: "progress",
             data: JSON.stringify(p),
           });
-        });
+        }, signal);
         const elapsedMs = performance.now() - t0;
         const html = (
           <ResultsTable
@@ -113,7 +132,7 @@ uiRoutes.get("/search/stream", async (c) => {
         ).toString();
         await stream.writeSSE({ event: "result", data: html });
       } else {
-        const result = await repo.search(q, { page, limit: 50 });
+        const result = await repo.search(q, { page, limit: 50 }, signal);
         const elapsedMs = performance.now() - t0;
         const html = (
           <ResultsTable
@@ -128,6 +147,14 @@ uiRoutes.get("/search/stream", async (c) => {
         await stream.writeSSE({ event: "result", data: html });
       }
     } catch (err) {
+      // Handle cancellation specifically
+      if (err instanceof SearchCancelledError) {
+        await stream.writeSSE({
+          event: "cancelled",
+          data: "Search cancelled"
+        });
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Search failed";
       await stream.writeSSE({ event: "error-msg", data: msg });
     }

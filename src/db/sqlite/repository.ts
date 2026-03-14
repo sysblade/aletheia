@@ -1,6 +1,6 @@
 import { sql } from "kysely";
 import type { Kysely } from "kysely";
-import { SearchError, type CertificateRepository } from "../repository.ts";
+import { SearchCancelledError, SearchError, type CertificateRepository } from "../repository.ts";
 import { parseSearchQuery } from "../search-query.ts";
 import type { SearchTerm } from "../search-query.ts";
 import type { Certificate, DailyStats, ExportBatch, HourlyStats, NewCertificate, SearchOpts, SearchResult, Stats, TopEntry } from "../../types/certificate.ts";
@@ -132,7 +132,12 @@ export class SqliteRepository implements CertificateRepository {
     }
   }
 
-  async search(query: string, opts: SearchOpts): Promise<SearchResult> {
+  async search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult> {
+    // Early abort check
+    if (signal?.aborted) {
+      throw new SearchCancelledError();
+    }
+
     const { page, limit } = opts;
     const offset = (page - 1) * limit;
     const parsed = parseSearchQuery(query);
@@ -203,11 +208,17 @@ export class SqliteRepository implements CertificateRepository {
         : sql``;
 
     try {
+      // COUNT query (blocking - cannot be interrupted)
       const countResult = await sql<{ cnt: number }>`
         SELECT COUNT(*) as cnt FROM certificates c
         WHERE c.id IN (SELECT rowid FROM certificates_fts WHERE certificates_fts MATCH ${matchExpr})
         ${afterCond} ${beforeCond} ${domainBoundaryCond}
       `.execute(this.db);
+
+      // Check abort after count completes
+      if (signal?.aborted) {
+        throw new SearchCancelledError();
+      }
 
       const total = countResult.rows[0]?.cnt ?? 0;
 
@@ -215,6 +226,12 @@ export class SqliteRepository implements CertificateRepository {
         return { certificates: [], total: 0, page, limit, totalPages: 0 };
       }
 
+      // Check abort before fetching results
+      if (signal?.aborted) {
+        throw new SearchCancelledError();
+      }
+
+      // Result query (blocking - cannot be interrupted)
       const rows = await sql<CertificateRow>`
         SELECT c.* FROM certificates c
         WHERE c.id IN (SELECT rowid FROM certificates_fts WHERE certificates_fts MATCH ${matchExpr})
@@ -222,6 +239,11 @@ export class SqliteRepository implements CertificateRepository {
         ORDER BY c.seen_at DESC
         LIMIT ${limit} OFFSET ${offset}
       `.execute(this.db);
+
+      // Check abort after results complete
+      if (signal?.aborted) {
+        throw new SearchCancelledError();
+      }
 
       return {
         certificates: rows.rows.map(rowToCertificate),
@@ -231,6 +253,8 @@ export class SqliteRepository implements CertificateRepository {
         totalPages: Math.ceil(total / limit),
       };
     } catch (err) {
+      if (err instanceof SearchCancelledError) throw err;
+      if (signal?.aborted) throw new SearchCancelledError();
       log.error("Search query failed with {error} for query {query}", { error: String(err), query });
       throw new SearchError("Search failed. Try a different query.");
     }

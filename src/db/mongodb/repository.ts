@@ -1,6 +1,6 @@
 import type { Db, Collection, Filter } from "mongodb";
 import { MongoBulkWriteError, ObjectId } from "mongodb";
-import { SearchError, type CertificateRepository } from "../repository.ts";
+import { SearchCancelledError, SearchError, type CertificateRepository } from "../repository.ts";
 import { parseSearchQuery } from "../search-query.ts";
 import type { SearchTerm } from "../search-query.ts";
 import type { Certificate, DailyStats, ExportBatch, HourlyStats, NewCertificate, SearchOpts, SearchResult, Stats, TopEntry } from "../../types/certificate.ts";
@@ -119,7 +119,12 @@ export class MongoRepository implements CertificateRepository {
     }
   }
 
-  async search(query: string, opts: SearchOpts): Promise<SearchResult> {
+  async search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult> {
+    // Early abort check
+    if (signal?.aborted) {
+      throw new SearchCancelledError();
+    }
+
     const { page, limit } = opts;
     const offset = (page - 1) * limit;
     const parsed = parseSearchQuery(query);
@@ -178,9 +183,14 @@ export class MongoRepository implements CertificateRepository {
       }
 
       const [total, docs] = await Promise.all([
-        this.certs.countDocuments(filter),
-        this.certs.find(filter).sort({ seenAt: -1 }).skip(offset).limit(limit).toArray(),
+        this.certs.countDocuments(filter, { signal }),
+        this.certs.find(filter, { signal }).sort({ seenAt: -1 }).skip(offset).limit(limit).toArray(),
       ]);
+
+      // Check abort after operations complete
+      if (signal?.aborted) {
+        throw new SearchCancelledError();
+      }
 
       return {
         certificates: docs.map(docToCertificate),
@@ -190,6 +200,12 @@ export class MongoRepository implements CertificateRepository {
         totalPages: Math.ceil(total / limit),
       };
     } catch (err) {
+      if (err instanceof SearchCancelledError) throw err;
+      if (signal?.aborted) throw new SearchCancelledError();
+      // Handle MongoDB-specific abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new SearchCancelledError();
+      }
       log.error("Search query failed with {error} for query {query}", { error: String(err), query });
       throw new SearchError("Search failed. Try a different query.");
     }

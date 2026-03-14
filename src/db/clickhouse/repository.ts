@@ -1,6 +1,6 @@
 import type { ClickHouseClient } from "@clickhouse/client-web";
 import { isProgressRow, isRow } from "@clickhouse/client-web";
-import { SearchError, type CertificateRepository } from "../repository.ts";
+import { SearchCancelledError, SearchError, type CertificateRepository } from "../repository.ts";
 import { parseSearchQuery } from "../search-query.ts";
 import type { SearchTerm } from "../search-query.ts";
 import type {
@@ -149,7 +149,12 @@ export class ClickHouseRepository implements CertificateRepository {
     }
   }
 
-  async search(query: string, opts: SearchOpts): Promise<SearchResult> {
+  async search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult> {
+    // Early abort check
+    if (signal?.aborted) {
+      throw new SearchCancelledError();
+    }
+
     const { page, limit } = opts;
     const offset = (page - 1) * limit;
     const parsed = parseSearchQuery(query);
@@ -225,8 +230,15 @@ export class ClickHouseRepository implements CertificateRepository {
         query: `SELECT count() AS cnt FROM certificates WHERE ${whereClause}`,
         query_params: params,
         format: "JSONEachRow",
+        abort_signal: signal,
       });
       const countRows = await countResult.json<{ cnt: string }>();
+
+      // Check abort after count completes
+      if (signal?.aborted) {
+        throw new SearchCancelledError();
+      }
+
       const total = Number(countRows[0]?.cnt ?? "0");
 
       if (total === 0) {
@@ -237,8 +249,15 @@ export class ClickHouseRepository implements CertificateRepository {
         query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
         query_params: { ...params, limit, offset },
         format: "JSONEachRow",
+        abort_signal: signal,
       });
       const rows = await rowsResult.json<CertificateRow>();
+
+      // Check abort after results complete
+      if (signal?.aborted) {
+        throw new SearchCancelledError();
+      }
+
       return {
         certificates: rows.map(rowToCertificate),
         total,
@@ -247,6 +266,8 @@ export class ClickHouseRepository implements CertificateRepository {
         totalPages: Math.ceil(total / limit),
       };
     } catch (err) {
+      if (err instanceof SearchCancelledError) throw err;
+      if (signal?.aborted) throw new SearchCancelledError();
       if (err instanceof SearchError) throw err;
       log.error("Search query failed with {error} for query {query}", {
         error: err,
@@ -260,7 +281,13 @@ export class ClickHouseRepository implements CertificateRepository {
     query: string,
     opts: SearchOpts,
     onProgress: (p: SearchProgress) => void,
+    signal?: AbortSignal,
   ): Promise<SearchResult> {
+    // Early abort check
+    if (signal?.aborted) {
+      throw new SearchCancelledError();
+    }
+
     const { page, limit } = opts;
     const offset = (page - 1) * limit;
     const parsed = parseSearchQuery(query);
@@ -332,6 +359,7 @@ export class ClickHouseRepository implements CertificateRepository {
         query: `SELECT count() AS cnt FROM certificates WHERE ${whereClause}`,
         query_params: params,
         format: "JSONEachRowWithProgress",
+        abort_signal: signal,
       });
 
       // Use .stream() so progress rows are emitted as ClickHouse sends them,
@@ -342,6 +370,12 @@ export class ClickHouseRepository implements CertificateRepository {
       let total = 0;
       let lastProgress: SearchProgress | null = null;
       while (true) {
+        // Check abort in read loop
+        if (signal?.aborted) {
+          await reader.cancel();
+          throw new SearchCancelledError();
+        }
+
         const { done, value } = await reader.read();
         if (done) break;
         for (const row of value) {
@@ -359,6 +393,11 @@ export class ClickHouseRepository implements CertificateRepository {
             total = Number(parsed.row.cnt);
           }
         }
+      }
+
+      // Check abort after count completes
+      if (signal?.aborted) {
+        throw new SearchCancelledError();
       }
 
       if (total === 0) {
@@ -379,8 +418,15 @@ export class ClickHouseRepository implements CertificateRepository {
         query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
         query_params: { ...params, limit, offset },
         format: "JSONEachRow",
+        abort_signal: signal,
       });
       const certRows = await rowsResult.json<CertificateRow>();
+
+      // Check abort after results complete
+      if (signal?.aborted) {
+        throw new SearchCancelledError();
+      }
+
       return {
         certificates: certRows.map(rowToCertificate),
         total,
@@ -389,6 +435,8 @@ export class ClickHouseRepository implements CertificateRepository {
         totalPages: Math.ceil(total / limit),
       };
     } catch (err) {
+      if (err instanceof SearchCancelledError) throw err;
+      if (signal?.aborted) throw new SearchCancelledError();
       if (err instanceof SearchError) throw err;
       log.error("Search query failed with {error} for query {query}", {
         error: err,

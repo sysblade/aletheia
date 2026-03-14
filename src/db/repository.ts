@@ -12,6 +12,17 @@ export class SearchError extends Error {
 }
 
 /**
+ * Error thrown when a search operation is cancelled by the client.
+ * Can be triggered by client disconnect or explicit cancellation.
+ */
+export class SearchCancelledError extends Error {
+  constructor() {
+    super("Search cancelled");
+    this.name = "SearchCancelledError";
+  }
+}
+
+/**
  * Repository interface for certificate storage and retrieval.
  * Implementations include SQLite (SqliteRepository) and MongoDB (MongoRepository).
  */
@@ -20,7 +31,7 @@ export interface CertificateRepository {
   insertBatch(certs: NewCertificate[]): Promise<number>;
 
   /** Search certificates using FTS query. Supports column filters (domain:, issuer:, cn:) and negation (-term). */
-  search(query: string, opts: SearchOpts): Promise<SearchResult>;
+  search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult>;
 
   /**
    * Optional: search with streaming progress callbacks during the COUNT query.
@@ -31,6 +42,7 @@ export interface CertificateRepository {
     query: string,
     opts: SearchOpts,
     onProgress: (p: SearchProgress) => void,
+    signal?: AbortSignal,
   ): Promise<SearchResult>;
 
   /** Get single certificate by fingerprint. Returns null if not found. */

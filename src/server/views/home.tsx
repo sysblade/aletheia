@@ -41,15 +41,38 @@ export function HomePage({
       <script dangerouslySetInnerHTML={{
           __html: `(function(){
   var es=null;
+  var cancelBtn=null;
   function fmtBytes(b){
     if(b<1e6)return(b/1e3).toFixed(1)+' KB';
     if(b<1e9)return(b/1e6).toFixed(1)+' MB';
     return(b/1e9).toFixed(2)+' GB';
   }
+  function cancelSearch(){
+    if(es){
+      es.close();
+      es=null;
+    }
+    if(cancelBtn){
+      cancelBtn.remove();
+      cancelBtn=null;
+    }
+  }
   function startSearch(q,page){
-    if(es){es.close();es=null;}
+    cancelSearch();
     var rd=document.getElementById('search-results');
+
+    // Create cancel button
+    cancelBtn=document.createElement('div');
+    cancelBtn.className='text-center mb-3';
+    cancelBtn.innerHTML='<button class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors">Cancel Search</button>';
+    cancelBtn.querySelector('button').onclick=function(){
+      cancelSearch();
+      rd.innerHTML='<div class="text-center py-12 text-yellow-400">Search cancelled</div>';
+    };
+
     rd.innerHTML='<div class="text-center py-8 text-gray-400"><div class="text-sm mb-3">Searching...</div><div class="w-full max-w-sm mx-auto bg-gray-800 rounded-full h-1 mb-3 overflow-hidden"><div id="spb" class="bg-green-500 h-1 rounded-full transition-all duration-300" style="width:0%"></div></div><div id="sps" class="text-xs text-gray-500 flex justify-center gap-4"><span>\u2014</span></div></div>';
+    rd.insertBefore(cancelBtn, rd.firstChild);
+
     var url='/search/stream?q='+encodeURIComponent(q)+'&page='+page;
     es=new EventSource(url);
     es.addEventListener('progress',function(e){
@@ -67,16 +90,21 @@ export function HomePage({
       var rd=document.getElementById('search-results');
       rd.innerHTML=e.data;
       if(window.htmx)htmx.process(rd);
-      es.close();es=null;
+      cancelSearch();
       var pushUrl=page===1?'/?q='+encodeURIComponent(q):'/?q='+encodeURIComponent(q)+'&page='+page;
       history.pushState({},'',pushUrl);
+    });
+    es.addEventListener('cancelled',function(e){
+      var rd=document.getElementById('search-results');
+      rd.innerHTML='<div class="text-center py-12 text-yellow-400">'+e.data+'</div>';
+      cancelSearch();
     });
     es.addEventListener('error-msg',function(e){
       var rd=document.getElementById('search-results');
       rd.innerHTML='<div class="text-center py-12 text-red-400">'+e.data+'</div>';
-      es.close();es=null;
+      cancelSearch();
     });
-    es.onerror=function(){es.close();es=null;};
+    es.onerror=function(){cancelSearch();};
   }
   var form=document.getElementById('search-form');
   if(form){

@@ -21,7 +21,7 @@ describe("IPC Integration", () => {
         ...process.env,
         CERTSTREAM_URL: "wss://invalid.test", // Won't connect, just testing IPC
         STORE_TYPE: "sqlite",
-        SQLITE_PATH: ":memory:",
+        DB_PATH: ":memory:",
       },
     });
 
@@ -87,7 +87,7 @@ describe("IPC Integration", () => {
         ...process.env,
         CERTSTREAM_URL: "wss://invalid.test",
         STORE_TYPE: "sqlite",
-        SQLITE_PATH: ":memory:",
+        DB_PATH: ":memory:",
         LOG_LEVEL: "error", // Reduce log noise
       },
     });
@@ -171,7 +171,7 @@ describe("IPC Integration", () => {
         ...process.env,
         CERTSTREAM_URL: "wss://invalid.test",
         STORE_TYPE: "sqlite",
-        SQLITE_PATH: ":memory:",
+        DB_PATH: ":memory:",
         LOG_LEVEL: "info",
       },
     });
@@ -288,7 +288,7 @@ describe("IPC Integration", () => {
         ...process.env,
         CERTSTREAM_URL: "", // Invalid URL will cause error
         STORE_TYPE: "invalid_store", // Invalid store type will cause startup failure
-        SQLITE_PATH: ":memory:",
+        DB_PATH: ":memory:",
       },
     });
 
