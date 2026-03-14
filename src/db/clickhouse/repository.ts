@@ -1,4 +1,5 @@
 import type { ClickHouseClient } from "@clickhouse/client-web";
+import { isProgressRow, isRow } from "@clickhouse/client-web";
 import { SearchError, type CertificateRepository } from "../repository.ts";
 import { parseSearchQuery } from "../search-query.ts";
 import type { SearchTerm } from "../search-query.ts";
@@ -9,6 +10,7 @@ import type {
   HourlyStats,
   NewCertificate,
   SearchOpts,
+  SearchProgress,
   SearchResult,
   Stats,
   TopEntry,
@@ -239,6 +241,127 @@ export class ClickHouseRepository implements CertificateRepository {
       const rows = await rowsResult.json<CertificateRow>();
       return {
         certificates: rows.map(rowToCertificate),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (err) {
+      if (err instanceof SearchError) throw err;
+      log.error("Search query failed with {error} for query {query}", {
+        error: err,
+        query,
+      });
+      throw new SearchError("Search failed. Try a different query.");
+    }
+  }
+
+  async searchWithProgress(
+    query: string,
+    opts: SearchOpts,
+    onProgress: (p: SearchProgress) => void,
+  ): Promise<SearchResult> {
+    const { page, limit } = opts;
+    const offset = (page - 1) * limit;
+    const parsed = parseSearchQuery(query);
+
+    if (parsed.groups.length === 0) {
+      throw new SearchError("Query must contain at least one search term.");
+    }
+
+    const params: Record<string, unknown> = {};
+    let paramIdx = 0;
+
+    const addParam = (value: string): string => {
+      const key = `p${paramIdx++}`;
+      params[key] = value;
+      return `{${key}:String}`;
+    };
+
+    const termExpr = (term: SearchTerm): string => {
+      const pattern = addParam(`%${escapeLike(term.text)}%`);
+      let expr: string;
+      switch (term.column) {
+        case "domain":
+          if (term.text.includes(".")) {
+            const exact = addParam(term.text);
+            const subdomain = addParam(`%.${escapeLike(term.text)}`);
+            expr = `arrayExists(x -> (x = ${exact} OR x LIKE ${subdomain}), domains)`;
+          } else {
+            expr = `arrayExists(x -> x LIKE ${pattern}, domains)`;
+          }
+          break;
+        case "issuer":
+          expr = `coalesce(issuerOrg, '') LIKE ${pattern}`;
+          break;
+        case "cn":
+          expr = `coalesce(subjectCn, '') LIKE ${pattern}`;
+          break;
+        default:
+          expr = `(arrayExists(x -> x LIKE ${pattern}, domains) OR coalesce(issuerOrg, '') LIKE ${pattern} OR coalesce(subjectCn, '') LIKE ${pattern})`;
+      }
+      return term.negate ? `NOT (${expr})` : expr;
+    };
+
+    const groupExpr = (terms: SearchTerm[]): string => {
+      const pos = terms.filter((t) => !t.negate);
+      if (pos.length === 0) {
+        throw new SearchError("Each OR group must contain at least one positive search term.");
+      }
+      const exprs = terms.map(termExpr);
+      return exprs.length === 1 ? exprs[0]! : `(${exprs.join(" AND ")})`;
+    };
+
+    const groupExprs = parsed.groups.map(groupExpr);
+    let whereClause =
+      groupExprs.length === 1 ? groupExprs[0]! : groupExprs.map((e) => `(${e})`).join(" OR ");
+
+    const { dateFilter } = parsed;
+    if (dateFilter.after !== undefined) {
+      params.ts_after = dateFilter.after;
+      whereClause += ` AND seenAt >= {ts_after:Int64}`;
+    }
+    if (dateFilter.before !== undefined) {
+      params.ts_before = dateFilter.before;
+      whereClause += ` AND seenAt < {ts_before:Int64}`;
+    }
+
+    try {
+      // Stream the COUNT query with progress events
+      const countResult = await this.client.query({
+        query: `SELECT count() AS cnt FROM certificates WHERE ${whereClause}`,
+        query_params: params,
+        format: "JSONEachRowWithProgress",
+      });
+
+      const rows = await countResult.json<{ cnt: string }>();
+      let total = 0;
+      for (const row of rows) {
+        if (isProgressRow(row)) {
+          const p = row.progress;
+          onProgress({
+            readRows: Number(p.read_rows),
+            totalRows: p.total_rows_to_read !== undefined ? Number(p.total_rows_to_read) : undefined,
+            readBytes: Number(p.read_bytes),
+            elapsedMs: Math.round(Number(p.elapsed_ns) / 1_000_000),
+          });
+        } else if (isRow(row)) {
+          total = Number(row.row.cnt);
+        }
+      }
+
+      if (total === 0) {
+        return { certificates: [], total: 0, page, limit, totalPages: 0 };
+      }
+
+      const rowsResult = await this.client.query({
+        query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+        query_params: { ...params, limit, offset },
+        format: "JSONEachRow",
+      });
+      const certRows = await rowsResult.json<CertificateRow>();
+      return {
+        certificates: certRows.map(rowToCertificate),
         total,
         page,
         limit,

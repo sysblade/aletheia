@@ -20,8 +20,11 @@ export const maintenanceCommand: CliCommand = {
     const repository = await createRepository(config.store.type, config, true, "aletheia-maintenance");
 
     try {
+      const t0 = performance.now();
       await repository.maintenance();
-      log.info("Database maintenance completed successfully");
+      const elapsedMs = performance.now() - t0;
+      log.info("Database maintenance completed successfully in {elapsedMs}", { elapsedMs: elapsedMs });
+
     } catch (err) {
       log.error("Database maintenance failed: {error}", { error: err });
       process.exit(1);

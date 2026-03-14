@@ -87,6 +87,68 @@ uiRoutes.get("/search/results", async (c) => {
   );
 });
 
+uiRoutes.get("/search/stream", async (c) => {
+  const repo = c.get("repository");
+  const q = c.req.query("q")?.trim() ?? "";
+  const page = Math.max(1, Number(c.req.query("page")) || 1);
+
+  if (q.length < 2) {
+    return streamSSE(c, async (stream) => {
+      await stream.writeSSE({
+        event: "error-msg",
+        data: "Enter at least 2 characters to search",
+      });
+    });
+  }
+
+  const pushUrl = page === 1 ? `/?q=${encodeURIComponent(q)}` : `/?q=${encodeURIComponent(q)}&page=${page}`;
+  c.header("HX-Push-Url", pushUrl);
+
+  return streamSSE(c, async (stream) => {
+    try {
+      const t0 = performance.now();
+
+      if (repo.searchWithProgress) {
+        const result = await repo.searchWithProgress(q, { page, limit: 50 }, async (p) => {
+          await stream.writeSSE({
+            event: "progress",
+            data: JSON.stringify(p),
+          });
+        });
+        const elapsedMs = performance.now() - t0;
+        const html = (
+          <ResultsTable
+            certificates={result.certificates}
+            total={result.total}
+            page={result.page}
+            totalPages={result.totalPages}
+            query={q}
+            elapsedMs={elapsedMs}
+          />
+        ).toString();
+        await stream.writeSSE({ event: "result", data: html });
+      } else {
+        const result = await repo.search(q, { page, limit: 50 });
+        const elapsedMs = performance.now() - t0;
+        const html = (
+          <ResultsTable
+            certificates={result.certificates}
+            total={result.total}
+            page={result.page}
+            totalPages={result.totalPages}
+            query={q}
+            elapsedMs={elapsedMs}
+          />
+        ).toString();
+        await stream.writeSSE({ event: "result", data: html });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Search failed";
+      await stream.writeSSE({ event: "error-msg", data: msg });
+    }
+  });
+});
+
 uiRoutes.get("/cert/:fingerprint", async (c) => {
   const repo = c.get("repository");
   const fingerprint = c.req.param("fingerprint");

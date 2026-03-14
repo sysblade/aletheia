@@ -1,4 +1,4 @@
-import type { Certificate, DailyStats, ExportBatch, HourlyStats, NewCertificate, SearchOpts, SearchResult, Stats } from "../types/certificate.ts";
+import type { Certificate, DailyStats, ExportBatch, HourlyStats, NewCertificate, SearchOpts, SearchProgress, SearchResult, Stats } from "../types/certificate.ts";
 
 /**
  * User-friendly error thrown when search query parsing or execution fails.
@@ -21,6 +21,17 @@ export interface CertificateRepository {
 
   /** Search certificates using FTS query. Supports column filters (domain:, issuer:, cn:) and negation (-term). */
   search(query: string, opts: SearchOpts): Promise<SearchResult>;
+
+  /**
+   * Optional: search with streaming progress callbacks during the COUNT query.
+   * Only implemented by backends that support streaming (e.g. ClickHouse).
+   * Falls back to a single `result` SSE event when absent.
+   */
+  searchWithProgress?(
+    query: string,
+    opts: SearchOpts,
+    onProgress: (p: SearchProgress) => void,
+  ): Promise<SearchResult>;
 
   /** Get single certificate by fingerprint. Returns null if not found. */
   getByFingerprint(fingerprint: string): Promise<Certificate | null>;

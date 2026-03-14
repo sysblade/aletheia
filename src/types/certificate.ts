@@ -41,6 +41,17 @@ export interface NewCertificate {
 }
 
 /**
+ * Progress update emitted during a streaming search COUNT query.
+ * Only produced by backends that support streaming (e.g. ClickHouse).
+ */
+export interface SearchProgress {
+  readRows: number;
+  totalRows?: number; // undefined when ClickHouse can't precompute
+  readBytes: number;
+  elapsedMs: number;
+}
+
+/**
  * Pagination options for certificate search queries.
  */
 export interface SearchOpts {
