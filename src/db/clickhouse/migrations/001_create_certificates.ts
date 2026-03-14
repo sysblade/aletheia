@@ -22,7 +22,10 @@ export async function up(client: ClickHouseClient): Promise<void> {
         certIndex    Nullable(Int64),
         certLink     Nullable(String),
         seenAt       Int64,
-        createdAt    Int64
+        createdAt    Int64,
+        INDEX domains_ngram  domains   TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4,
+        INDEX issuer_ngram   issuerOrg TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4,
+        INDEX subject_ngram  subjectCn TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4
       ) ENGINE = ReplacingMergeTree(createdAt)
       ORDER BY fingerprint
       SETTINGS index_granularity = 8192

@@ -1,44 +1,21 @@
 import type { ClickHouseClient } from "@clickhouse/client-web";
 
 /**
- * Add ngram bloom filter indexes for fast full-text search on domains, issuer, and subject.
- * These skip indexes help ClickHouse skip data granules that don't match the search pattern.
+ * No-op migration: Ngram indexes moved to inline definition in migration 001.
+ *
+ * Originally this migration added indexes via ALTER TABLE, but ClickHouse doesn't
+ * support adding ngram bloom filter indexes to Nullable(String) columns after table creation.
+ * The indexes must be defined inline in CREATE TABLE, so they were moved to migration 001.
+ *
+ * This migration is kept as a no-op to maintain migration sequence numbering.
  */
-export async function up(client: ClickHouseClient): Promise<void> {
-  // Add ngram indexes to existing table
-  // Note: ALTER TABLE ADD INDEX is supported since ClickHouse 20.1
-  await client.command({
-    query: `
-      ALTER TABLE certificates
-      ADD INDEX IF NOT EXISTS domains_ngram domains TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4
-    `,
-  });
-
-  await client.command({
-    query: `
-      ALTER TABLE certificates
-      ADD INDEX IF NOT EXISTS issuer_ngram issuerOrg TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4
-    `,
-  });
-
-  await client.command({
-    query: `
-      ALTER TABLE certificates
-      ADD INDEX IF NOT EXISTS subject_ngram subjectCn TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4
-    `,
-  });
+export async function up(_client: ClickHouseClient): Promise<void> {
+  // Indexes are created inline in migration 001
+  // Nothing to do here
 }
 
-export async function down(client: ClickHouseClient): Promise<void> {
-  await client.command({
-    query: `ALTER TABLE certificates DROP INDEX IF EXISTS domains_ngram`,
-  });
-
-  await client.command({
-    query: `ALTER TABLE certificates DROP INDEX IF EXISTS issuer_ngram`,
-  });
-
-  await client.command({
-    query: `ALTER TABLE certificates DROP INDEX IF EXISTS subject_ngram`,
-  });
+export async function down(_client: ClickHouseClient): Promise<void> {
+  // Indexes are part of table definition in migration 001
+  // They would be dropped when the table is dropped
+  // Nothing to do here
 }

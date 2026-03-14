@@ -341,6 +341,16 @@ bun test          # Run tests
 bun compile       # Build self-contained binary to out/aletheia
 ```
 
+### Database Migrations
+
+Aletheia uses proper migration systems for both SQLite and ClickHouse:
+
+- **SQLite**: Managed by Kysely Migrator (8 migrations)
+- **ClickHouse**: Custom migration system (5 migrations)
+- **MongoDB**: Schemaless, no migrations needed
+
+Migrations run automatically on startup. See [MIGRATIONS.md](MIGRATIONS.md) for details on adding new migrations.
+
 ## Production Deployment
 
 ### Using the Compiled Binary
