@@ -340,6 +340,7 @@ export class ClickHouseRepository implements CertificateRepository {
       const countStream = countResult.stream<{ cnt: string }>();
       const reader = countStream.getReader();
       let total = 0;
+      let lastProgress: SearchProgress | null = null;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -347,12 +348,13 @@ export class ClickHouseRepository implements CertificateRepository {
           const parsed = row.json();
           if (isProgressRow(parsed)) {
             const p = parsed.progress;
-            onProgress({
+            lastProgress = {
               readRows: Number(p.read_rows),
               totalRows: p.total_rows_to_read !== undefined ? Number(p.total_rows_to_read) : undefined,
               readBytes: Number(p.read_bytes),
               elapsedMs: Math.round(Number(p.elapsed_ns) / 1_000_000),
-            });
+            };
+            onProgress(lastProgress);
           } else if (isRow(parsed)) {
             total = Number(parsed.row.cnt);
           }
@@ -365,8 +367,13 @@ export class ClickHouseRepository implements CertificateRepository {
 
       // Signal that the count phase is done and we're now fetching the result rows.
       // Omitting totalRows switches the bar to indeterminate/pulsing mode so the
-      // user sees activity rather than a bar frozen at 100%.
-      onProgress({ readRows: 0, readBytes: 0, elapsedMs: 0 });
+      // user sees activity rather than a bar frozen at 100%. Preserve the last
+      // known row/byte counts so the stats text doesn't reset to zero.
+      onProgress({
+        readRows: lastProgress?.readRows ?? 0,
+        readBytes: lastProgress?.readBytes ?? 0,
+        elapsedMs: lastProgress?.elapsedMs ?? 0,
+      });
 
       const rowsResult = await this.client.query({
         query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
