@@ -334,19 +334,28 @@ export class ClickHouseRepository implements CertificateRepository {
         format: "JSONEachRowWithProgress",
       });
 
-      const rows = await countResult.json<{ cnt: string }>();
+      // Use .stream() so progress rows are emitted as ClickHouse sends them,
+      // rather than buffering everything with .json() and firing all progress
+      // callbacks in a burst after the query finishes.
+      const countStream = countResult.stream<{ cnt: string }>();
+      const reader = countStream.getReader();
       let total = 0;
-      for (const row of rows) {
-        if (isProgressRow(row)) {
-          const p = row.progress;
-          onProgress({
-            readRows: Number(p.read_rows),
-            totalRows: p.total_rows_to_read !== undefined ? Number(p.total_rows_to_read) : undefined,
-            readBytes: Number(p.read_bytes),
-            elapsedMs: Math.round(Number(p.elapsed_ns) / 1_000_000),
-          });
-        } else if (isRow(row)) {
-          total = Number(row.row.cnt);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const row of value) {
+          const parsed = row.json();
+          if (isProgressRow(parsed)) {
+            const p = parsed.progress;
+            onProgress({
+              readRows: Number(p.read_rows),
+              totalRows: p.total_rows_to_read !== undefined ? Number(p.total_rows_to_read) : undefined,
+              readBytes: Number(p.read_bytes),
+              elapsedMs: Math.round(Number(p.elapsed_ns) / 1_000_000),
+            });
+          } else if (isRow(parsed)) {
+            total = Number(parsed.row.cnt);
+          }
         }
       }
 
