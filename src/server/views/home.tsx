@@ -40,6 +40,7 @@ export function HomePage({
 
       <script dangerouslySetInnerHTML={{
           __html: `(function(){
+  console.log('[Aletheia] Search cancellation script loaded');
   var es=null;
   var cancelBtn=null;
   var cancelled=false;
@@ -65,6 +66,7 @@ export function HomePage({
     hideSpinner();
   }
   function startSearch(q,page){
+    console.log('[Aletheia] Starting SSE search for:', q);
     cancelSearch();
     cancelled=false;
     var rd=document.getElementById('search-results');
@@ -85,6 +87,7 @@ export function HomePage({
     rd.insertBefore(cancelBtn, rd.firstChild);
 
     var url='/search/stream?q='+encodeURIComponent(q)+'&page='+page;
+    console.log('[Aletheia] Opening EventSource:', url);
     es=new EventSource(url);
     es.addEventListener('progress',function(e){
       if(cancelled)return;
@@ -126,12 +129,18 @@ export function HomePage({
   }
   var form=document.getElementById('search-form');
   if(form){
+    console.log('[Aletheia] Attaching submit handler to search form');
     form.addEventListener('submit',function(e){
+      console.log('[Aletheia] Form submitted, preventing default and using SSE');
       e.preventDefault();
+      e.stopPropagation();
       var q=document.getElementById('search-input').value.trim();
       if(q.length<2)return;
       startSearch(q,1);
+      return false;
     });
+  } else {
+    console.error('[Aletheia] Search form not found!');
   }
   document.addEventListener('DOMContentLoaded',function(){
     var inp=document.getElementById('search-input');

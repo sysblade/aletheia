@@ -2,10 +2,6 @@ export function SearchForm({ query }: { query?: string }) {
   return (
     <form
       id="search-form"
-      hx-get="/search/results"
-      hx-target="#search-results"
-      hx-trigger="submit"
-      hx-indicator="#search-spinner"
       class="w-full"
     >
       <div class="flex gap-3">
