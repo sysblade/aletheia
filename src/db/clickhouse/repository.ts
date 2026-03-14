@@ -363,6 +363,11 @@ export class ClickHouseRepository implements CertificateRepository {
         return { certificates: [], total: 0, page, limit, totalPages: 0 };
       }
 
+      // Signal that the count phase is done and we're now fetching the result rows.
+      // Omitting totalRows switches the bar to indeterminate/pulsing mode so the
+      // user sees activity rather than a bar frozen at 100%.
+      onProgress({ readRows: 0, readBytes: 0, elapsedMs: 0 });
+
       const rowsResult = await this.client.query({
         query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
         query_params: { ...params, limit, offset },
