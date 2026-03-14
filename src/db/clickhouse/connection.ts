@@ -108,6 +108,17 @@ async function ensureTables(client: ClickHouseClient): Promise<void> {
 
   await client.command({
     query: `
+      CREATE TABLE IF NOT EXISTS metadata (
+        key        String,
+        value      String,
+        updatedAt  Int64
+      ) ENGINE = ReplacingMergeTree(updatedAt)
+      ORDER BY key
+    `,
+  });
+
+  await client.command({
+    query: `
       CREATE TABLE IF NOT EXISTS daily_stats (
         periodStart       Int64,
         periodEnd         Int64,

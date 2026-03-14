@@ -16,6 +16,8 @@ function makeRepo(overrides?: Partial<CertificateRepository>): CertificateReposi
     computeStatsForPeriod: mock(() => Promise.resolve()),
     cleanup: mock(() => Promise.resolve(0)),
     maintenance: mock(() => Promise.resolve()),
+    getMetadata: mock(() => Promise.resolve(null)),
+    setMetadata: mock(() => Promise.resolve()),
     exportBatch: mock(() => Promise.resolve({ certificates: [], cursor: null })),
     close: mock(() => Promise.resolve()),
     ...overrides,

@@ -9,6 +9,7 @@ import * as m004 from "./migrations/004_fts_detail_none.ts";
 import * as m005 from "./migrations/005_fts_detail_full.ts";
 import * as m006 from "./migrations/006_add_not_after_index.ts";
 import * as m007 from "./migrations/007_create_stats_tables.ts";
+import * as m008 from "./migrations/008_create_metadata.ts";
 
 const log = getLogger(["aletheia", "migrate"]);
 
@@ -26,6 +27,7 @@ class StaticMigrationProvider implements MigrationProvider {
       "005_fts_detail_full": m005,
       "006_add_not_after_index": m006,
       "007_create_stats_tables": m007,
+      "008_create_metadata": m008,
     };
   }
 }

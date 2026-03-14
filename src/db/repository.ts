@@ -48,6 +48,12 @@ export interface CertificateRepository {
   /** Run database maintenance operations (optimize, checkpoint, analyze). */
   maintenance(): Promise<void>;
 
+  /** Get a system metadata value by key. Returns null if not set. */
+  getMetadata(key: string): Promise<string | null>;
+
+  /** Upsert a system metadata value. */
+  setMetadata(key: string, value: string): Promise<void>;
+
   /** Export certificates in batches for data migration. Uses cursor-based pagination (fingerprint-ordered). */
   exportBatch(cursor: string | null, limit: number): Promise<ExportBatch>;
 

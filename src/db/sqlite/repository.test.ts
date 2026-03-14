@@ -360,6 +360,30 @@ describe("SqliteRepository", () => {
     });
   });
 
+  describe("getMetadata / setMetadata", () => {
+    test("returns null for missing key", async () => {
+      expect(await repo.getMetadata("nonexistent")).toBeNull();
+    });
+
+    test("stores and retrieves a value", async () => {
+      await repo.setMetadata("test_key", "hello");
+      expect(await repo.getMetadata("test_key")).toBe("hello");
+    });
+
+    test("upserts on conflict", async () => {
+      await repo.setMetadata("test_key", "first");
+      await repo.setMetadata("test_key", "second");
+      expect(await repo.getMetadata("test_key")).toBe("second");
+    });
+
+    test("keys are independent", async () => {
+      await repo.setMetadata("key_a", "alpha");
+      await repo.setMetadata("key_b", "beta");
+      expect(await repo.getMetadata("key_a")).toBe("alpha");
+      expect(await repo.getMetadata("key_b")).toBe("beta");
+    });
+  });
+
   describe("cleanup", () => {
     test("deletes old rows, keeps recent ones", async () => {
       const now = Math.floor(Date.now() / 1000);

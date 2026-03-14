@@ -64,9 +64,10 @@ program
 program
   .command("maintenance")
   .description("Run database maintenance (internal use for scheduled maintenance)")
-  .action(async () => {
+  .option("--force", "Bypass the 1-hour cooldown and run maintenance unconditionally")
+  .action(async (options: { force?: boolean }) => {
     await configureLogging("maintenance");
-    await maintenanceCommand.run([]);
+    await maintenanceCommand.run(options.force ? ["--force"] : []);
   });
 
 // Stats command

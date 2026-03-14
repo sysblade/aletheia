@@ -87,12 +87,14 @@ export function HomePage({
       startSearch(q,1);
     });
   }
-  var inp=document.getElementById('search-input');
-  if(inp&&inp.value.trim().length>=2){
-    var sp=new URLSearchParams(window.location.search);
-    var pg=Math.max(1,parseInt(sp.get('page')||'1',10));
-    startSearch(inp.value.trim(),pg);
-  }
+  document.addEventListener('DOMContentLoaded',function(){
+    var inp=document.getElementById('search-input');
+    if(inp&&inp.value.trim().length>=2){
+      var sp=new URLSearchParams(window.location.search);
+      var pg=Math.max(1,parseInt(sp.get('page')||'1',10));
+      startSearch(inp.value.trim(),pg);
+    }
+  });
 })();`,
         }}
       />

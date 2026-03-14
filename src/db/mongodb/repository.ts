@@ -75,11 +75,13 @@ export class MongoRepository implements CertificateRepository {
   private certs: Collection<CertificateDocument>;
   private hourlyStats: Collection<HourlyStatsDocument>;
   private dailyStats: Collection<DailyStatsDocument>;
+  private metadataCol: Collection<{ _id: string; value: string; updatedAt: number }>;
 
   constructor(private db: Db) {
     this.certs = db.collection<CertificateDocument>("certificates");
     this.hourlyStats = db.collection<HourlyStatsDocument>("hourly_stats");
     this.dailyStats = db.collection<DailyStatsDocument>("daily_stats");
+    this.metadataCol = db.collection("metadata");
   }
 
   async insertBatch(certs: NewCertificate[]): Promise<number> {
@@ -255,6 +257,19 @@ export class MongoRepository implements CertificateRepository {
     }
 
     return deleted;
+  }
+
+  async getMetadata(key: string): Promise<string | null> {
+    const doc = await this.metadataCol.findOne({ _id: key } as Filter<{ _id: string; value: string; updatedAt: number }>);
+    return doc?.value ?? null;
+  }
+
+  async setMetadata(key: string, value: string): Promise<void> {
+    await this.metadataCol.updateOne(
+      { _id: key } as Filter<{ _id: string; value: string; updatedAt: number }>,
+      { $set: { value, updatedAt: Math.floor(Date.now() / 1000) } },
+      { upsert: true },
+    );
   }
 
   async maintenance(): Promise<void> {

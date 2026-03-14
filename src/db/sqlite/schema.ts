@@ -70,12 +70,22 @@ export interface DailyStatsTable {
   computed_at: ColumnType<number, number | undefined, never>;
 }
 
+/**
+ * Generic key-value metadata table for system state (e.g. last maintenance timestamp).
+ */
+export interface MetadataTable {
+  key: string;
+  value: string;
+  updated_at: number;
+}
+
 /** Kysely database schema definition. */
 export interface Database {
   certificates: CertificatesTable;
   certificates_fts: CertificatesFtsTable;
   hourly_stats: HourlyStatsTable;
   daily_stats: DailyStatsTable;
+  metadata: MetadataTable;
 }
 
 /** Certificate row as selected from database. */

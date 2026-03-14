@@ -293,6 +293,24 @@ export class SqliteRepository implements CertificateRepository {
     return deleted;
   }
 
+  async getMetadata(key: string): Promise<string | null> {
+    const row = await this.db
+      .selectFrom("metadata")
+      .select("value")
+      .where("key", "=", key)
+      .executeTakeFirst();
+    return row?.value ?? null;
+  }
+
+  async setMetadata(key: string, value: string): Promise<void> {
+    const now = Math.floor(Date.now() / 1000);
+    await this.db
+      .insertInto("metadata")
+      .values({ key, value, updated_at: now })
+      .onConflict((oc) => oc.column("key").doUpdateSet({ value, updated_at: now }))
+      .execute();
+  }
+
   async maintenance(): Promise<void> {
     log.info("Starting database maintenance");
 

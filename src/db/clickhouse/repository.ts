@@ -470,6 +470,26 @@ export class ClickHouseRepository implements CertificateRepository {
     return deleted;
   }
 
+  async getMetadata(key: string): Promise<string | null> {
+    const result = await this.client.query({
+      query: "SELECT value FROM metadata FINAL WHERE key = {key:String} LIMIT 1",
+      query_params: { key },
+      format: "JSONEachRow",
+    });
+    for (const row of await result.json<{ value: string }>()) {
+      return row.value;
+    }
+    return null;
+  }
+
+  async setMetadata(key: string, value: string): Promise<void> {
+    await this.client.insert({
+      table: "metadata",
+      values: [{ key, value, updatedAt: Math.floor(Date.now() / 1000) }],
+      format: "JSONEachRow",
+    });
+  }
+
   async maintenance(): Promise<void> {
     // Force merging of parts, which triggers ReplacingMergeTree deduplication
     await this.client.command({ query: "OPTIMIZE TABLE certificates FINAL" });
