@@ -3,8 +3,7 @@ import { SearchForm } from "./components/search-form.tsx";
 import { SearchGuide } from "./search.tsx";
 import { StatsCard } from "./components/stats-card.tsx";
 import { LiveStreamSection } from "./components/live-stream.tsx";
-import { ResultsTable } from "./components/results-table.tsx";
-import type { SearchResult, Stats } from "../../types/certificate.ts";
+import type { Stats } from "../../types/certificate.ts";
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -20,16 +19,12 @@ export function HomePage({
   uptimeSeconds,
   filterMode,
   query,
-  initialResult,
-  initialElapsedMs,
 }: {
   stats: Stats;
   insertRate: number;
   uptimeSeconds: number;
   filterMode: string;
   query?: string;
-  initialResult?: SearchResult | null;
-  initialElapsedMs?: number;
 }) {
   return (
     <Layout>
@@ -92,22 +87,17 @@ export function HomePage({
       startSearch(q,1);
     });
   }
+  var inp=document.getElementById('search-input');
+  if(inp&&inp.value.trim().length>=2){
+    var sp=new URLSearchParams(window.location.search);
+    var pg=Math.max(1,parseInt(sp.get('page')||'1',10));
+    startSearch(inp.value.trim(),pg);
+  }
 })();`,
         }}
       />
 
-      <div id="search-results">
-        {initialResult && (
-          <ResultsTable
-            certificates={initialResult.certificates}
-            total={initialResult.total}
-            page={initialResult.page}
-            totalPages={initialResult.totalPages}
-            query={query ?? ""}
-            elapsedMs={initialElapsedMs ?? 0}
-          />
-        )}
-      </div>
+      <div id="search-results"></div>
 
       <div
         class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8"

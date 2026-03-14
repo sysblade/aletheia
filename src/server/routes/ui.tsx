@@ -7,7 +7,7 @@ import { CertDetail } from "../views/components/cert-detail.tsx";
 import { LiveStreamRows, LiveStreamTable } from "../views/components/live-stream.tsx";
 import { Layout } from "../views/layout.tsx";
 import { StatsPage, StatsContent } from "../views/stats/stats-page.tsx";
-import type { SearchResult, TopEntry } from "../../types/certificate.ts";
+import type { TopEntry } from "../../types/certificate.ts";
 import { getLogger } from "../../utils/logger.ts";
 
 const LIVE_STREAM_LIMIT = 25;
@@ -26,19 +26,6 @@ uiRoutes.get("/", async (c) => {
   const m = metrics.snapshot();
 
   const q = c.req.query("q")?.trim() ?? "";
-  const page = Math.max(1, Number(c.req.query("page")) || 1);
-
-  let initialResult: SearchResult | null = null;
-  let initialElapsedMs = 0;
-  if (q.length >= 2) {
-    const t0 = performance.now();
-    try {
-      initialResult = await repo.search(q, { page, limit: 50 });
-    } catch {
-      // render page without results on error
-    }
-    initialElapsedMs = performance.now() - t0;
-  }
 
   return c.html(
     <HomePage
@@ -47,8 +34,6 @@ uiRoutes.get("/", async (c) => {
       uptimeSeconds={Math.floor((Date.now() - m.startedAt) / 1000)}
       filterMode={filter.mode}
       query={q}
-      initialResult={initialResult}
-      initialElapsedMs={initialElapsedMs}
     />,
   );
 });
