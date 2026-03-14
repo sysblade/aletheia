@@ -107,6 +107,11 @@ uiRoutes.get("/search/stream", async (c) => {
       abortController.abort();
     });
 
+    // Log when signal is aborted
+    signal.addEventListener('abort', () => {
+      log.debug("Search aborted for query {query}", { query: q });
+    });
+
     try {
       const t0 = performance.now();
 

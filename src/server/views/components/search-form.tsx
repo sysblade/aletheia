@@ -18,6 +18,7 @@ export function SearchForm({ query }: { query?: string }) {
             placeholder="Search domains, issuers... (e.g. *.google.com, Let's Encrypt)"
             class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
             autocomplete="off"
+            autofocus
             minlength={2}
           />
           <div id="search-spinner" class="htmx-indicator absolute right-3 top-3.5">

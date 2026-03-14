@@ -42,12 +42,18 @@ export function HomePage({
           __html: `(function(){
   var es=null;
   var cancelBtn=null;
+  var cancelled=false;
   function fmtBytes(b){
     if(b<1e6)return(b/1e3).toFixed(1)+' KB';
     if(b<1e9)return(b/1e6).toFixed(1)+' MB';
     return(b/1e9).toFixed(2)+' GB';
   }
+  function hideSpinner(){
+    var spinner=document.getElementById('search-spinner');
+    if(spinner)spinner.classList.remove('htmx-request');
+  }
   function cancelSearch(){
+    cancelled=true;
     if(es){
       es.close();
       es=null;
@@ -56,10 +62,15 @@ export function HomePage({
       cancelBtn.remove();
       cancelBtn=null;
     }
+    hideSpinner();
   }
   function startSearch(q,page){
     cancelSearch();
+    cancelled=false;
     var rd=document.getElementById('search-results');
+
+    // Hide HTMX spinner (we have our own progress UI)
+    hideSpinner();
 
     // Create cancel button
     cancelBtn=document.createElement('div');
@@ -76,6 +87,7 @@ export function HomePage({
     var url='/search/stream?q='+encodeURIComponent(q)+'&page='+page;
     es=new EventSource(url);
     es.addEventListener('progress',function(e){
+      if(cancelled)return;
       var p=JSON.parse(e.data);
       var pct=p.totalRows?Math.round(p.readRows/p.totalRows*100):0;
       var bar=document.getElementById('spb');
@@ -87,6 +99,7 @@ export function HomePage({
       if(stats)stats.innerHTML='<span>'+p.readRows.toLocaleString()+(p.totalRows?' / '+p.totalRows.toLocaleString():'')+' rows</span><span>'+fmtBytes(p.readBytes)+'</span><span>'+p.elapsedMs+'ms</span>';
     });
     es.addEventListener('result',function(e){
+      if(cancelled)return;
       var rd=document.getElementById('search-results');
       rd.innerHTML=e.data;
       if(window.htmx)htmx.process(rd);
@@ -95,16 +108,21 @@ export function HomePage({
       history.pushState({},'',pushUrl);
     });
     es.addEventListener('cancelled',function(e){
+      if(cancelled)return;
+      cancelled=true;
       var rd=document.getElementById('search-results');
       rd.innerHTML='<div class="text-center py-12 text-yellow-400">'+e.data+'</div>';
       cancelSearch();
     });
     es.addEventListener('error-msg',function(e){
+      if(cancelled)return;
       var rd=document.getElementById('search-results');
       rd.innerHTML='<div class="text-center py-12 text-red-400">'+e.data+'</div>';
       cancelSearch();
     });
-    es.onerror=function(){cancelSearch();};
+    es.onerror=function(){
+      if(!cancelled)cancelSearch();
+    };
   }
   var form=document.getElementById('search-form');
   if(form){
