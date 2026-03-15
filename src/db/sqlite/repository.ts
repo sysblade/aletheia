@@ -132,12 +132,8 @@ export class SqliteRepository implements CertificateRepository {
     }
   }
 
-  async search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult> {
-    // Early abort check
-    if (signal?.aborted) {
-      throw new SearchCancelledError();
-    }
-
+  /** Build the FTS match expression and SQL conditions shared by search() and any future searchWithProgress(). */
+  private buildSearchQuery(query: string, opts: SearchOpts) {
     const { page, limit } = opts;
     const offset = (page - 1) * limit;
     const parsed = parseSearchQuery(query);
@@ -230,6 +226,18 @@ export class SqliteRepository implements CertificateRepository {
       allGroupsHaveFullDomainTerms && domainGroupConds.length > 0
         ? sql.raw(`AND (${domainGroupConds.join(" OR ")})`)
         : sql``;
+
+    return { matchExpr, afterCond, beforeCond, wildcardCond, domainCountCond, domainBoundaryCond, page, limit, offset };
+  }
+
+  async search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult> {
+    // Early abort check
+    if (signal?.aborted) {
+      throw new SearchCancelledError();
+    }
+
+    const { matchExpr, afterCond, beforeCond, wildcardCond, domainCountCond, domainBoundaryCond, page, limit, offset } =
+      this.buildSearchQuery(query, opts);
 
     try {
       // COUNT query (blocking - cannot be interrupted)

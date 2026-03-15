@@ -149,13 +149,14 @@ export class ClickHouseRepository implements CertificateRepository {
     }
   }
 
-  async search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult> {
-    // Early abort check
-    if (signal?.aborted) {
-      log.debug("Search aborted before starting for query {query}", { query });
-      throw new SearchCancelledError();
-    }
-
+  /** Build the parameterised WHERE clause shared by search() and searchWithProgress(). */
+  private buildSearchQuery(query: string, opts: SearchOpts): {
+    whereClause: string;
+    params: Record<string, unknown>;
+    page: number;
+    limit: number;
+    offset: number;
+  } {
     const { page, limit } = opts;
     const offset = (page - 1) * limit;
     const parsed = parseSearchQuery(query);
@@ -165,7 +166,7 @@ export class ClickHouseRepository implements CertificateRepository {
     }
 
     // Build parameterised WHERE clause.
-    // Named params p0, p1, ... hold regex patterns; limit/offset are separate.
+    // Named params p0, p1, ... hold values; limit/offset are separate.
     const params: Record<string, unknown> = {};
     let paramIdx = 0;
 
@@ -246,14 +247,12 @@ export class ClickHouseRepository implements CertificateRepository {
       whereClause += ` AND seenAt < {ts_before:Int64}`;
     }
 
-    // Filter for wildcard certificates only
     if (wildcardOnly === true) {
       whereClause += ` AND arrayExists(x -> startsWith(x, '*.'), domains)`;
     } else if (wildcardOnly === false) {
       whereClause += ` AND NOT arrayExists(x -> startsWith(x, '*.'), domains)`;
     }
 
-    // Filter by domain count
     if (domainCountFilter) {
       params.domain_count_value = domainCountFilter.value;
       switch (domainCountFilter.operator) {
@@ -275,84 +274,11 @@ export class ClickHouseRepository implements CertificateRepository {
       }
     }
 
-    try {
-      const t0 = performance.now();
-      log.info("Starting ClickHouse COUNT query for search {query}", { query });
+    return { whereClause, params, page, limit, offset };
+  }
 
-      const countResult = await this.client.query({
-        query: `SELECT count() AS cnt FROM certificates WHERE ${whereClause}`,
-        query_params: params,
-        format: "JSONEachRow",
-        abort_signal: signal,
-      });
-      const countRows = await countResult.json<{ cnt: string }>();
-
-      const countElapsed = performance.now() - t0;
-      log.info("ClickHouse COUNT completed in {elapsed}ms for search {query}", { elapsed: countElapsed.toFixed(0), query });
-
-      // Check abort after count completes
-      if (signal?.aborted) {
-        log.debug("Search aborted after COUNT (took {elapsed}ms) for query {query}", { elapsed: countElapsed.toFixed(0), query });
-        throw new SearchCancelledError();
-      }
-
-      const total = Number(countRows[0]?.cnt ?? "0");
-
-      if (total === 0) {
-        return { certificates: [], total: 0, page, limit, totalPages: 0 };
-      }
-
-      const t1 = performance.now();
-      log.info("Starting ClickHouse SELECT query (total={total}) for search {query}", { total, query });
-
-      const rowsResult = await this.client.query({
-        query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
-        query_params: { ...params, limit, offset },
-        format: "JSONEachRow",
-        abort_signal: signal,
-      });
-      const rows = await rowsResult.json<CertificateRow>();
-
-      const selectElapsed = performance.now() - t1;
-      log.info("ClickHouse SELECT completed in {elapsed}ms for search {query}", { elapsed: selectElapsed.toFixed(0), query });
-
-      // Check abort after results complete
-      if (signal?.aborted) {
-        log.debug("Search aborted after SELECT (took {elapsed}ms) for query {query}", { elapsed: selectElapsed.toFixed(0), query });
-        throw new SearchCancelledError();
-      }
-
-      return {
-        certificates: rows.map(rowToCertificate),
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      };
-    } catch (err) {
-      if (err instanceof SearchCancelledError) {
-        log.debug("Search cancelled for query {query}", { query });
-        throw err;
-      }
-      if (signal?.aborted) {
-        log.debug("Search aborted during execution for query {query}", { query });
-        throw new SearchCancelledError();
-      }
-      // Check if it's an abort-related error from ClickHouse
-      if (err instanceof Error) {
-        const errMsg = err.message.toLowerCase();
-        if (errMsg.includes('abort') || errMsg.includes('cancel') || errMsg.includes('closed')) {
-          log.debug("ClickHouse query aborted (error: {error}) for query {query}", { error: err.message, query });
-          throw new SearchCancelledError();
-        }
-      }
-      if (err instanceof SearchError) throw err;
-      log.error("Search query failed with {error} for query {query}", {
-        error: err,
-        query,
-      });
-      throw new SearchError("Search failed. Try a different query.");
-    }
+  async search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult> {
+    return this.searchWithProgress(query, opts, () => {}, signal);
   }
 
   async searchWithProgress(
@@ -363,107 +289,15 @@ export class ClickHouseRepository implements CertificateRepository {
   ): Promise<SearchResult> {
     // Early abort check
     if (signal?.aborted) {
-      log.debug("SearchWithProgress aborted before starting for query {query}", { query });
+      log.debug("Search aborted before starting for query {query}", { query });
       throw new SearchCancelledError();
     }
 
-    const { page, limit } = opts;
-    const offset = (page - 1) * limit;
-    const parsed = parseSearchQuery(query);
-
-    if (parsed.groups.length === 0) {
-      throw new SearchError("Query must contain at least one search term.");
-    }
-
-    const params: Record<string, unknown> = {};
-    let paramIdx = 0;
-
-    const addParam = (value: string): string => {
-      const key = `p${paramIdx++}`;
-      params[key] = value;
-      return `{${key}:String}`;
-    };
-
-    const termExpr = (term: SearchTerm): string => {
-      const pattern = addParam(`%${escapeLike(term.text)}%`);
-      let expr: string;
-      switch (term.column) {
-        case "domain":
-          if (term.text.includes(".")) {
-            const exact = addParam(term.text);
-            const subdomain = addParam(`%.${escapeLike(term.text)}`);
-            expr = `arrayExists(x -> (x = ${exact} OR x LIKE ${subdomain}), domains)`;
-          } else {
-            expr = `arrayExists(x -> x LIKE ${pattern}, domains)`;
-          }
-          break;
-        case "issuer":
-          expr = `coalesce(issuerOrg, '') LIKE ${pattern}`;
-          break;
-        case "cn":
-          expr = `coalesce(subjectCn, '') LIKE ${pattern}`;
-          break;
-        default:
-          expr = `(arrayExists(x -> x LIKE ${pattern}, domains) OR coalesce(issuerOrg, '') LIKE ${pattern} OR coalesce(subjectCn, '') LIKE ${pattern})`;
-      }
-      return term.negate ? `NOT (${expr})` : expr;
-    };
-
-    const groupExpr = (terms: SearchTerm[]): string => {
-      const pos = terms.filter((t) => !t.negate);
-      if (pos.length === 0) {
-        throw new SearchError("Each OR group must contain at least one positive search term.");
-      }
-      const exprs = terms.map(termExpr);
-      return exprs.length === 1 ? exprs[0]! : `(${exprs.join(" AND ")})`;
-    };
-
-    const groupExprs = parsed.groups.map(groupExpr);
-    let whereClause =
-      groupExprs.length === 1 ? groupExprs[0]! : groupExprs.map((e) => `(${e})`).join(" OR ");
-
-    const { dateFilter, wildcardOnly, domainCountFilter } = parsed;
-    if (dateFilter.after !== undefined) {
-      params.ts_after = dateFilter.after;
-      whereClause += ` AND seenAt >= {ts_after:Int64}`;
-    }
-    if (dateFilter.before !== undefined) {
-      params.ts_before = dateFilter.before;
-      whereClause += ` AND seenAt < {ts_before:Int64}`;
-    }
-
-    // Filter for wildcard certificates only
-    if (wildcardOnly === true) {
-      whereClause += ` AND arrayExists(x -> startsWith(x, '*.'), domains)`;
-    } else if (wildcardOnly === false) {
-      whereClause += ` AND NOT arrayExists(x -> startsWith(x, '*.'), domains)`;
-    }
-
-    // Filter by domain count
-    if (domainCountFilter) {
-      params.domain_count_value = domainCountFilter.value;
-      switch (domainCountFilter.operator) {
-        case ">":
-          whereClause += ` AND domainCount > {domain_count_value:UInt32}`;
-          break;
-        case ">=":
-          whereClause += ` AND domainCount >= {domain_count_value:UInt32}`;
-          break;
-        case "<":
-          whereClause += ` AND domainCount < {domain_count_value:UInt32}`;
-          break;
-        case "<=":
-          whereClause += ` AND domainCount <= {domain_count_value:UInt32}`;
-          break;
-        case "=":
-          whereClause += ` AND domainCount = {domain_count_value:UInt32}`;
-          break;
-      }
-    }
+    const { whereClause, params, page, limit, offset } = this.buildSearchQuery(query, opts);
 
     try {
       const t0 = performance.now();
-      log.info("Starting ClickHouse streaming COUNT query for search {query}", { query });
+      log.debug("Starting ClickHouse streaming COUNT query for search {query}", { query });
 
       // Stream the COUNT query with progress events
       const countResult = await this.client.query({
@@ -515,7 +349,7 @@ export class ClickHouseRepository implements CertificateRepository {
       }
 
       const countElapsed = performance.now() - t0;
-      log.info("ClickHouse streaming COUNT completed in {elapsed}ms ({events} progress events, total={total}) for search {query}", {
+      log.debug("ClickHouse streaming COUNT completed in {elapsed}ms ({events} progress events, total={total}) for search {query}", {
         elapsed: countElapsed.toFixed(0),
         events: progressEventCount,
         total,
@@ -543,7 +377,7 @@ export class ClickHouseRepository implements CertificateRepository {
       });
 
       const t1 = performance.now();
-      log.info("Starting ClickHouse SELECT query (total={total}) for search {query}", { total, query });
+      log.debug("Starting ClickHouse SELECT query (total={total}) for search {query}", { total, query });
 
       const rowsResult = await this.client.query({
         query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
@@ -554,7 +388,7 @@ export class ClickHouseRepository implements CertificateRepository {
       const certRows = await rowsResult.json<CertificateRow>();
 
       const selectElapsed = performance.now() - t1;
-      log.info("ClickHouse SELECT completed in {elapsed}ms for search {query}", { elapsed: selectElapsed.toFixed(0), query });
+      log.debug("ClickHouse SELECT completed in {elapsed}ms for search {query}", { elapsed: selectElapsed.toFixed(0), query });
 
       // Check abort after results complete
       if (signal?.aborted) {

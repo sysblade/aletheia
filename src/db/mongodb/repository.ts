@@ -119,12 +119,13 @@ export class MongoRepository implements CertificateRepository {
     }
   }
 
-  async search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult> {
-    // Early abort check
-    if (signal?.aborted) {
-      throw new SearchCancelledError();
-    }
-
+  /** Build the MongoDB filter shared by search() and any future searchWithProgress(). */
+  private buildSearchQuery(query: string, opts: SearchOpts): {
+    filter: Filter<CertificateDocument>;
+    page: number;
+    limit: number;
+    offset: number;
+  } {
     const { page, limit } = opts;
     const offset = (page - 1) * limit;
     const parsed = parseSearchQuery(query);
@@ -189,53 +190,64 @@ export class MongoRepository implements CertificateRepository {
       return conditions.length === 1 ? conditions[0]! : { $and: conditions };
     }
 
+    const groupFilters = parsed.groups.map(groupFilter);
+    let filter: Filter<CertificateDocument> =
+      groupFilters.length === 1
+        ? (groupFilters[0] as Filter<CertificateDocument>)
+        : ({ $or: groupFilters } as Filter<CertificateDocument>);
+
+    const { dateFilter, wildcardOnly, domainCountFilter } = parsed;
+    const additionalFilters: Filter<CertificateDocument>[] = [];
+
+    // Date filter
+    if (dateFilter.after !== undefined || dateFilter.before !== undefined) {
+      const seenAtRange: Record<string, number> = {};
+      if (dateFilter.after !== undefined) seenAtRange.$gte = dateFilter.after;
+      if (dateFilter.before !== undefined) seenAtRange.$lt = dateFilter.before;
+      additionalFilters.push({ seenAt: seenAtRange } as Filter<CertificateDocument>);
+    }
+
+    // Wildcard filter: check if any domain starts with *.
+    if (wildcardOnly === true) {
+      additionalFilters.push({ domains: { $elemMatch: { $regex: "^\\*\\." } } } as Filter<CertificateDocument>);
+    } else if (wildcardOnly === false) {
+      additionalFilters.push({ domains: { $not: { $elemMatch: { $regex: "^\\*\\." } } } } as Filter<CertificateDocument>);
+    }
+
+    // Domain count filter
+    if (domainCountFilter) {
+      const op = domainCountFilter.operator;
+      const val = domainCountFilter.value;
+      if (op === ">") {
+        additionalFilters.push({ domainCount: { $gt: val } } as Filter<CertificateDocument>);
+      } else if (op === ">=") {
+        additionalFilters.push({ domainCount: { $gte: val } } as Filter<CertificateDocument>);
+      } else if (op === "<") {
+        additionalFilters.push({ domainCount: { $lt: val } } as Filter<CertificateDocument>);
+      } else if (op === "<=") {
+        additionalFilters.push({ domainCount: { $lte: val } } as Filter<CertificateDocument>);
+      } else if (op === "=") {
+        additionalFilters.push({ domainCount: val } as Filter<CertificateDocument>);
+      }
+    }
+
+    // Combine all filters
+    if (additionalFilters.length > 0) {
+      filter = { $and: [filter, ...additionalFilters] } as Filter<CertificateDocument>;
+    }
+
+    return { filter, page, limit, offset };
+  }
+
+  async search(query: string, opts: SearchOpts, signal?: AbortSignal): Promise<SearchResult> {
+    // Early abort check
+    if (signal?.aborted) {
+      throw new SearchCancelledError();
+    }
+
+    const { filter, page, limit, offset } = this.buildSearchQuery(query, opts);
+
     try {
-      const groupFilters = parsed.groups.map(groupFilter);
-      let filter: Filter<CertificateDocument> =
-        groupFilters.length === 1
-          ? (groupFilters[0] as Filter<CertificateDocument>)
-          : ({ $or: groupFilters } as Filter<CertificateDocument>);
-
-      const { dateFilter, wildcardOnly, domainCountFilter } = parsed;
-      const additionalFilters: Filter<CertificateDocument>[] = [];
-
-      // Date filter
-      if (dateFilter.after !== undefined || dateFilter.before !== undefined) {
-        const seenAtRange: Record<string, number> = {};
-        if (dateFilter.after !== undefined) seenAtRange.$gte = dateFilter.after;
-        if (dateFilter.before !== undefined) seenAtRange.$lt = dateFilter.before;
-        additionalFilters.push({ seenAt: seenAtRange } as Filter<CertificateDocument>);
-      }
-
-      // Wildcard filter: check if any domain starts with *.
-      if (wildcardOnly === true) {
-        additionalFilters.push({ domains: { $elemMatch: { $regex: "^\\*\\." } } } as Filter<CertificateDocument>);
-      } else if (wildcardOnly === false) {
-        additionalFilters.push({ domains: { $not: { $elemMatch: { $regex: "^\\*\\." } } } } as Filter<CertificateDocument>);
-      }
-
-      // Domain count filter
-      if (domainCountFilter) {
-        const op = domainCountFilter.operator;
-        const val = domainCountFilter.value;
-        if (op === ">") {
-          additionalFilters.push({ domainCount: { $gt: val } } as Filter<CertificateDocument>);
-        } else if (op === ">=") {
-          additionalFilters.push({ domainCount: { $gte: val } } as Filter<CertificateDocument>);
-        } else if (op === "<") {
-          additionalFilters.push({ domainCount: { $lt: val } } as Filter<CertificateDocument>);
-        } else if (op === "<=") {
-          additionalFilters.push({ domainCount: { $lte: val } } as Filter<CertificateDocument>);
-        } else if (op === "=") {
-          additionalFilters.push({ domainCount: val } as Filter<CertificateDocument>);
-        }
-      }
-
-      // Combine all filters
-      if (additionalFilters.length > 0) {
-        filter = { $and: [filter, ...additionalFilters] } as Filter<CertificateDocument>;
-      }
-
       const [total, docs] = await Promise.all([
         this.certs.countDocuments(filter, { signal }),
         this.certs.find(filter, { signal }).sort({ seenAt: -1 }).skip(offset).limit(limit).toArray(),

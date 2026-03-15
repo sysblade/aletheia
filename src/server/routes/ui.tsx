@@ -7,7 +7,7 @@ import { CertDetail } from "../views/components/cert-detail.tsx";
 import { LiveStreamRows, LiveStreamTable } from "../views/components/live-stream.tsx";
 import { Layout } from "../views/layout.tsx";
 import { StatsPage, StatsContent } from "../views/stats/stats-page.tsx";
-import type { TopEntry } from "../../types/certificate.ts";
+import type { TopEntry, SearchProgress } from "../../types/certificate.ts";
 import { SearchCancelledError } from "../../db/repository.ts";
 import { getLogger } from "../../utils/logger.ts";
 
@@ -115,42 +115,25 @@ uiRoutes.get("/search/stream", async (c) => {
     try {
       const t0 = performance.now();
 
-      if (repo.searchWithProgress) {
-        const result = await repo.searchWithProgress(q, { page, limit: 50 }, async (p) => {
-          // Don't send progress if already aborted
-          if (signal.aborted) return;
-          await stream.writeSSE({
-            event: "progress",
-            data: JSON.stringify(p),
-          });
-        }, signal);
-        const elapsedMs = performance.now() - t0;
-        const html = (
-          <ResultsTable
-            certificates={result.certificates}
-            total={result.total}
-            page={result.page}
-            totalPages={result.totalPages}
-            query={q}
-            elapsedMs={elapsedMs}
-          />
-        ).toString();
-        await stream.writeSSE({ event: "result", data: html });
-      } else {
-        const result = await repo.search(q, { page, limit: 50 }, signal);
-        const elapsedMs = performance.now() - t0;
-        const html = (
-          <ResultsTable
-            certificates={result.certificates}
-            total={result.total}
-            page={result.page}
-            totalPages={result.totalPages}
-            query={q}
-            elapsedMs={elapsedMs}
-          />
-        ).toString();
-        await stream.writeSSE({ event: "result", data: html });
-      }
+      const onProgress = async (p: SearchProgress) => {
+        if (signal.aborted) return;
+        await stream.writeSSE({ event: "progress", data: JSON.stringify(p) });
+      };
+      const result = repo.searchWithProgress
+        ? await repo.searchWithProgress(q, { page, limit: 50 }, onProgress, signal)
+        : await repo.search(q, { page, limit: 50 }, signal);
+      const elapsedMs = performance.now() - t0;
+      const html = (
+        <ResultsTable
+          certificates={result.certificates}
+          total={result.total}
+          page={result.page}
+          totalPages={result.totalPages}
+          query={q}
+          elapsedMs={elapsedMs}
+        />
+      ).toString();
+      await stream.writeSSE({ event: "result", data: html });
     } catch (err) {
       // Handle cancellation specifically
       if (err instanceof SearchCancelledError) {
