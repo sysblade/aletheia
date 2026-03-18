@@ -20,17 +20,21 @@ const log = getLogger(["aletheia", "clickhouse", "migrate"]);
  * 1. Create certificates_v2 with the new schema.
  * 2. RENAME TABLE certificates → certificates_old, certificates_v2 → certificates.
  *    This is atomic: from this point all live writes go to the new schema.
- * 3. INSERT INTO certificates SELECT * FROM certificates_old to backfill history.
- *    Uses max_execution_time = 86400 (server-side). The HTTP client uses the
- *    maintenance timeout (see connection.ts). For very large datasets this INSERT
- *    may outlive the HTTP timeout; the server continues and the next restart will
- *    retry (ReplacingMergeTree deduplicates any re-inserted rows automatically).
+ * 3. Cursor-based backfill: copy certificates_old → certificates in batches of
+ *    BATCH_SIZE rows, using fingerprint as the cursor key (certificates_old is
+ *    ORDER BY fingerprint so each batch is a fast primary-key range scan).
+ *    The cursor is persisted in the metadata table after every batch so the
+ *    migration is fully resumable across process restarts.
  * 4. DROP TABLE certificates_old.
  *
- * Idempotency: the migration checks system.tables for the partition_key before
- * doing any work, and handles the case where the rename happened but the backfill
- * did not complete (certificates_old still present).
+ * Idempotency: checks system.tables for the partition_key before doing any work,
+ * and handles the case where the rename happened but the backfill did not finish
+ * (certificates_old still present → resume from saved cursor).
  */
+
+const BATCH_SIZE = 1_000_000;
+const CURSOR_KEY = "migration:007_backfill_cursor";
+
 export async function up(client: ClickHouseClient): Promise<void> {
   // Check if certificates already has daily partitioning
   const tableResult = await client.query({
@@ -42,7 +46,6 @@ export async function up(client: ClickHouseClient): Promise<void> {
     format: "JSONEachRow",
   });
   const [tableInfo] = await tableResult.json<{ partition_key: string }>();
-
   const alreadyPartitioned = tableInfo?.partition_key === "toDate(toDateTime(seenAt))";
 
   // Check if a previous run got through the rename but not the backfill
@@ -102,22 +105,162 @@ export async function up(client: ClickHouseClient): Promise<void> {
     });
   }
 
-  // Backfill historical data from the old table.
-  // max_execution_time gives the server up to 24 h to complete this.
-  // If the HTTP client times out first, the server continues running the INSERT;
-  // the next startup retries (ReplacingMergeTree deduplicates the overlap).
-  log.info("Backfilling historical certificates from certificates_old (this may take a while)");
-  await client.command({
-    query: `
-      INSERT INTO certificates
-      SELECT * FROM certificates_old
-      ORDER BY seenAt, fingerprint
-      SETTINGS max_execution_time = 86400
-    `,
+  await backfillWithProgress(client);
+
+  log.info("Dropping certificates_old");
+  await client.command({ query: `DROP TABLE IF EXISTS certificates_old` });
+
+  // Clean up the cursor key left in metadata (best-effort)
+  try {
+    await client.command({
+      query: `ALTER TABLE metadata DELETE WHERE key = {key:String}`,
+      query_params: { key: CURSOR_KEY },
+    });
+  } catch {
+    // Non-fatal — the stale key is harmless
+  }
+}
+
+/**
+ * Copy all rows from certificates_old into certificates using cursor-based batching.
+ *
+ * Why not a single INSERT INTO SELECT:
+ * - ClickHouse 26.x cancels INSERT INTO SELECT when the HTTP connection closes
+ *   (QUERY_WAS_CANCELLED), which happens whenever any HTTP timeout fires.
+ * - There is no HTTP-level keep-alive mechanism for INSERT commands that would
+ *   prevent this cancellation.
+ *
+ * Cursor-based approach:
+ * - certificates_old is ORDER BY fingerprint, so each batch is a fast primary-key
+ *   range scan with no full-table scans.
+ * - Each batch is small enough (1 M rows) to complete in well under any timeout.
+ * - The cursor is written to the metadata table after every successful batch so
+ *   the migration is fully resumable: a process restart picks up exactly where
+ *   it left off without re-copying already-migrated rows.
+ * - ReplacingMergeTree deduplicates by fingerprint during background merges, so
+ *   even if a batch is retried it cannot corrupt data.
+ */
+async function backfillWithProgress(client: ClickHouseClient): Promise<void> {
+  // COUNT without WHERE reads part-level metadata — effectively instant even
+  // on tables with billions of rows.
+  const totalResult = await client.query({
+    query: `SELECT count() AS cnt FROM certificates_old`,
+    format: "JSONEachRow",
+  });
+  const [totalRow] = await totalResult.json<{ cnt: string }>();
+  const totalRows = Number(totalRow?.cnt ?? 0);
+
+  if (totalRows === 0) {
+    log.info("certificates_old is empty, nothing to backfill");
+    return;
+  }
+
+  // Restore cursor from a previous partial run
+  let cursor = "";
+  let rowsDone = 0;
+  try {
+    const r = await client.query({
+      query: `SELECT value FROM metadata FINAL WHERE key = {key:String} LIMIT 1`,
+      query_params: { key: CURSOR_KEY },
+      format: "JSONEachRow",
+    });
+    const [row] = await r.json<{ value: string }>();
+    cursor = row?.value ?? "";
+    if (cursor) {
+      // Re-derive approximate rows done so the progress percentage is correct
+      const doneR = await client.query({
+        query: `SELECT count() AS cnt FROM certificates_old WHERE fingerprint <= {cursor:String}`,
+        query_params: { cursor },
+        format: "JSONEachRow",
+      });
+      const [doneRow] = await doneR.json<{ cnt: string }>();
+      rowsDone = Number(doneRow?.cnt ?? 0);
+      log.info("Resuming backfill: {done}/{total} rows already copied", {
+        done: rowsDone.toLocaleString(),
+        total: totalRows.toLocaleString(),
+      });
+    }
+  } catch {
+    // Cursor key absent — start from scratch
+  }
+
+  const estimatedBatches = Math.ceil(totalRows / BATCH_SIZE);
+  log.info("Backfilling {total} rows in ~{batches} batches of {batch}", {
+    total: totalRows.toLocaleString(),
+    batches: estimatedBatches,
+    batch: BATCH_SIZE.toLocaleString(),
   });
 
-  log.info("Backfill complete, dropping certificates_old");
-  await client.command({ query: `DROP TABLE IF EXISTS certificates_old` });
+  let batchNum = 0;
+
+  while (true) {
+    // Determine the end boundary of this batch via a primary-key range scan.
+    // certificates_old ORDER BY fingerprint so OFFSET on the primary key is
+    // O(ceil(BATCH_SIZE / index_granularity)) — about 122 granule reads for
+    // 1 M rows, negligible cost.
+    const boundaryResult = await client.query({
+      query: `
+        SELECT fingerprint FROM certificates_old
+        WHERE fingerprint > {cursor:String}
+        ORDER BY fingerprint ASC
+        LIMIT 1 OFFSET {offset:UInt32}
+      `,
+      query_params: { cursor, offset: BATCH_SIZE - 1 },
+      format: "JSONEachRow",
+    });
+    const [boundaryRow] = await boundaryResult.json<{ fingerprint: string }>();
+
+    if (!boundaryRow) {
+      // Fewer than BATCH_SIZE rows remain — insert them all and we're done.
+      await client.command({
+        query: `
+          INSERT INTO certificates
+          SELECT * FROM certificates_old
+          WHERE fingerprint > {cursor:String}
+          SETTINGS insert_deduplicate = 0
+        `,
+        query_params: { cursor },
+      });
+      batchNum++;
+      log.info("Backfill complete: {total} rows copied in {batches} batches", {
+        total: totalRows.toLocaleString(),
+        batches: batchNum,
+      });
+      return;
+    }
+
+    const batchEnd = boundaryRow.fingerprint;
+
+    await client.command({
+      query: `
+        INSERT INTO certificates
+        SELECT * FROM certificates_old
+        WHERE fingerprint > {cursor:String} AND fingerprint <= {end:String}
+        SETTINGS insert_deduplicate = 0
+      `,
+      query_params: { cursor, end: batchEnd },
+    });
+
+    cursor = batchEnd;
+    rowsDone = Math.min(rowsDone + BATCH_SIZE, totalRows);
+    batchNum++;
+
+    // Persist cursor so a restart resumes from here rather than the beginning.
+    await client.insert({
+      table: "metadata",
+      values: [{ key: CURSOR_KEY, value: cursor, updatedAt: Date.now() }],
+      format: "JSONEachRow",
+    });
+
+    const pct = ((rowsDone / totalRows) * 100).toFixed(1);
+    log.info("Backfill progress: {done}/{total} ({pct}%), batch {batchNum}/{batches}", {
+      done: rowsDone.toLocaleString(),
+      total: totalRows.toLocaleString(),
+      pct,
+      batchNum,
+      batches: estimatedBatches,
+    });
+  }
 }
 
 export async function down(client: ClickHouseClient): Promise<void> {
