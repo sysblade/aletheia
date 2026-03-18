@@ -57,6 +57,17 @@ export interface SearchProgress {
 export interface SearchOpts {
   page: number;
   limit: number;
+  /**
+   * Total result count from a previous page-1 query.
+   * When provided on page > 1, the COUNT query is skipped entirely.
+   */
+  knownTotal?: number;
+  /**
+   * Cursor for forward pagination: "seenAt:fingerprint" of the last row
+   * from the previous page. When provided, replaces OFFSET with a keyset
+   * WHERE condition for O(1) page fetching regardless of page depth.
+   */
+  cursor?: string;
 }
 
 /**

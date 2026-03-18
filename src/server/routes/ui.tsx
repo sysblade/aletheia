@@ -45,6 +45,8 @@ uiRoutes.get("/search/results", async (c) => {
   const repo = c.get("repository");
   const q = c.req.query("q")?.trim() ?? "";
   const page = Math.max(1, Number(c.req.query("page")) || 1);
+  const knownTotal = c.req.query("total") ? Number(c.req.query("total")) : undefined;
+  const cursor = c.req.query("cursor") ?? undefined;
 
   if (q.length < 2) {
     return c.html(
@@ -61,7 +63,7 @@ uiRoutes.get("/search/results", async (c) => {
   });
 
   const t0 = performance.now();
-  const result = await repo.search(q, { page, limit: 50 }, abortController.signal);
+  const result = await repo.search(q, { page, limit: 50, knownTotal, cursor }, abortController.signal);
   const elapsedMs = performance.now() - t0;
 
   const pushUrl = page === 1 ? `/?q=${encodeURIComponent(q)}` : `/?q=${encodeURIComponent(q)}&page=${page}`;
@@ -83,6 +85,8 @@ uiRoutes.get("/search/stream", async (c) => {
   const repo = c.get("repository");
   const q = c.req.query("q")?.trim() ?? "";
   const page = Math.max(1, Number(c.req.query("page")) || 1);
+  const knownTotal = c.req.query("total") ? Number(c.req.query("total")) : undefined;
+  const cursor = c.req.query("cursor") ?? undefined;
 
   if (q.length < 2) {
     return streamSSE(c, async (stream) => {
@@ -120,8 +124,8 @@ uiRoutes.get("/search/stream", async (c) => {
         await stream.writeSSE({ event: "progress", data: JSON.stringify(p) });
       };
       const result = repo.searchWithProgress
-        ? await repo.searchWithProgress(q, { page, limit: 50 }, onProgress, signal)
-        : await repo.search(q, { page, limit: 50 }, signal);
+        ? await repo.searchWithProgress(q, { page, limit: 50, knownTotal, cursor }, onProgress, signal)
+        : await repo.search(q, { page, limit: 50, knownTotal, cursor }, signal);
       const elapsedMs = performance.now() - t0;
       const html = (
         <ResultsTable

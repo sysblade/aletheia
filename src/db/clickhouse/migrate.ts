@@ -6,6 +6,8 @@ import * as m002 from "./migrations/002_add_ngram_indexes.ts";
 import * as m003 from "./migrations/003_create_hourly_stats.ts";
 import * as m004 from "./migrations/004_create_metadata.ts";
 import * as m005 from "./migrations/005_create_daily_stats.ts";
+import * as m006 from "./migrations/006_optimize_indexes.ts";
+import * as m007 from "./migrations/007_daily_partitioning.ts";
 
 const log = getLogger(["aletheia", "clickhouse", "migrate"]);
 
@@ -24,6 +26,8 @@ const migrations: Record<string, ClickHouseMigration> = {
   "003_create_hourly_stats": m003,
   "004_create_metadata": m004,
   "005_create_daily_stats": m005,
+  "006_optimize_indexes": m006,
+  "007_daily_partitioning": m007,
 };
 
 /**

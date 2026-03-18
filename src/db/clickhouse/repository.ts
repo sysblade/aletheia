@@ -297,94 +297,154 @@ export class ClickHouseRepository implements CertificateRepository {
 
     try {
       const t0 = performance.now();
-      log.debug("Starting ClickHouse streaming COUNT query for search {query}", { query });
 
-      // Stream the COUNT query with progress events
-      const countResult = await this.client.query({
-        query: `SELECT count() AS cnt FROM certificates WHERE ${whereClause}`,
-        query_params: params,
-        format: "JSONEachRowWithProgress",
-        abort_signal: signal,
-      });
-
-      // Use .stream() so progress rows are emitted as ClickHouse sends them,
-      // rather than buffering everything with .json() and firing all progress
-      // callbacks in a burst after the query finishes.
-      const countStream = countResult.stream<{ cnt: string }>();
-      const reader = countStream.getReader();
-      let total = 0;
-      let lastProgress: SearchProgress | null = null;
-      let progressEventCount = 0;
-      while (true) {
-        // Check abort in read loop
-        if (signal?.aborted) {
-          const elapsed = performance.now() - t0;
-          log.debug("Search aborted during streaming (after {elapsed}ms, {events} progress events) for query {query}", {
-            elapsed: elapsed.toFixed(0),
-            events: progressEventCount,
-            query
+      // Page-1 short-circuit: if results fit on a single page we can skip the
+      // streaming COUNT entirely — no progress bar needed for a fast response.
+      if (page === 1) {
+        const earlyResult = await this.client.query({
+          query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32}`,
+          query_params: { ...params, limit: limit + 1 },
+          format: "JSONEachRow",
+          abort_signal: signal,
+        });
+        const earlyRows = await earlyResult.json<CertificateRow>();
+        if (earlyRows.length <= limit) {
+          const elapsedMs = Math.round(performance.now() - t0);
+          onProgress({ readRows: earlyRows.length, totalRows: earlyRows.length, readBytes: 0, elapsedMs });
+          log.debug("ClickHouse page-1 short-circuit in {elapsed}ms (total={total}) for search {query}", {
+            elapsed: elapsedMs,
+            total: earlyRows.length,
+            query,
           });
-          await reader.cancel();
+          return {
+            certificates: earlyRows.map(rowToCertificate),
+            total: earlyRows.length,
+            page,
+            limit,
+            totalPages: earlyRows.length > 0 ? 1 : 0,
+          };
+        }
+      }
+
+      let total: number;
+
+      // Skip streaming COUNT if the caller already knows the total (page > 1 navigation).
+      // knownTotal is passed from the pagination URL so we don't re-scan the whole table.
+      if (opts.knownTotal !== undefined && page > 1) {
+        total = opts.knownTotal;
+        log.debug("Skipping COUNT, using knownTotal={total} for page {page} of search {query}", { total, page, query });
+      } else {
+        log.debug("Starting ClickHouse streaming COUNT query for search {query}", { query });
+
+        // Stream the COUNT query with progress events
+        const countResult = await this.client.query({
+          query: `SELECT count() AS cnt FROM certificates WHERE ${whereClause}`,
+          query_params: params,
+          format: "JSONEachRowWithProgress",
+          abort_signal: signal,
+        });
+
+        // Use .stream() so progress rows are emitted as ClickHouse sends them,
+        // rather than buffering everything with .json() and firing all progress
+        // callbacks in a burst after the query finishes.
+        const countStream = countResult.stream<{ cnt: string }>();
+        const reader = countStream.getReader();
+        total = 0;
+        let lastProgress: SearchProgress | null = null;
+        let progressEventCount = 0;
+        while (true) {
+          // Check abort in read loop
+          if (signal?.aborted) {
+            const elapsed = performance.now() - t0;
+            log.debug("Search aborted during streaming (after {elapsed}ms, {events} progress events) for query {query}", {
+              elapsed: elapsed.toFixed(0),
+              events: progressEventCount,
+              query
+            });
+            await reader.cancel();
+            throw new SearchCancelledError();
+          }
+
+          const { done, value } = await reader.read();
+          if (done) break;
+          for (const row of value) {
+            const parsed = row.json();
+            if (isProgressRow(parsed)) {
+              progressEventCount++;
+              const p = parsed.progress;
+              lastProgress = {
+                readRows: Number(p.read_rows),
+                totalRows: p.total_rows_to_read !== undefined ? Number(p.total_rows_to_read) : undefined,
+                readBytes: Number(p.read_bytes),
+                elapsedMs: Math.round(Number(p.elapsed_ns) / 1_000_000),
+              };
+              onProgress(lastProgress);
+            } else if (isRow(parsed)) {
+              total = Number(parsed.row.cnt);
+            }
+          }
+        }
+
+        const countElapsed = performance.now() - t0;
+        log.debug("ClickHouse streaming COUNT completed in {elapsed}ms ({events} progress events, total={total}) for search {query}", {
+          elapsed: countElapsed.toFixed(0),
+          events: progressEventCount,
+          total,
+          query
+        });
+
+        // Check abort after count completes
+        if (signal?.aborted) {
+          log.debug("Search aborted after streaming COUNT (took {elapsed}ms) for query {query}", { elapsed: countElapsed.toFixed(0), query });
           throw new SearchCancelledError();
         }
 
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const row of value) {
-          const parsed = row.json();
-          if (isProgressRow(parsed)) {
-            progressEventCount++;
-            const p = parsed.progress;
-            lastProgress = {
-              readRows: Number(p.read_rows),
-              totalRows: p.total_rows_to_read !== undefined ? Number(p.total_rows_to_read) : undefined,
-              readBytes: Number(p.read_bytes),
-              elapsedMs: Math.round(Number(p.elapsed_ns) / 1_000_000),
-            };
-            onProgress(lastProgress);
-          } else if (isRow(parsed)) {
-            total = Number(parsed.row.cnt);
-          }
+        if (total === 0) {
+          return { certificates: [], total: 0, page, limit, totalPages: 0 };
         }
+
+        // Signal that the count phase is done and we're now fetching the result rows.
+        // Omitting totalRows switches the bar to indeterminate/pulsing mode so the
+        // user sees activity rather than a bar frozen at 100%. Preserve the last
+        // known row/byte counts so the stats text doesn't reset to zero.
+        onProgress({
+          readRows: lastProgress?.readRows ?? 0,
+          readBytes: lastProgress?.readBytes ?? 0,
+          elapsedMs: lastProgress?.elapsedMs ?? 0,
+        });
       }
-
-      const countElapsed = performance.now() - t0;
-      log.debug("ClickHouse streaming COUNT completed in {elapsed}ms ({events} progress events, total={total}) for search {query}", {
-        elapsed: countElapsed.toFixed(0),
-        events: progressEventCount,
-        total,
-        query
-      });
-
-      // Check abort after count completes
-      if (signal?.aborted) {
-        log.debug("Search aborted after streaming COUNT (took {elapsed}ms) for query {query}", { elapsed: countElapsed.toFixed(0), query });
-        throw new SearchCancelledError();
-      }
-
-      if (total === 0) {
-        return { certificates: [], total: 0, page, limit, totalPages: 0 };
-      }
-
-      // Signal that the count phase is done and we're now fetching the result rows.
-      // Omitting totalRows switches the bar to indeterminate/pulsing mode so the
-      // user sees activity rather than a bar frozen at 100%. Preserve the last
-      // known row/byte counts so the stats text doesn't reset to zero.
-      onProgress({
-        readRows: lastProgress?.readRows ?? 0,
-        readBytes: lastProgress?.readBytes ?? 0,
-        elapsedMs: lastProgress?.elapsedMs ?? 0,
-      });
 
       const t1 = performance.now();
       log.debug("Starting ClickHouse SELECT query (total={total}) for search {query}", { total, query });
 
-      const rowsResult = await this.client.query({
-        query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
-        query_params: { ...params, limit, offset },
-        format: "JSONEachRow",
-        abort_signal: signal,
-      });
+      // Cursor-based pagination: O(1) keyset seek regardless of page depth.
+      // Cursor encodes the last row from the previous page as "seenAt:fingerprint".
+      // Falls back to OFFSET when no cursor (e.g. Previous button navigation).
+      let rowsResult;
+      if (opts.cursor) {
+        const colonIdx = opts.cursor.indexOf(":");
+        const cursorTs = opts.cursor.slice(0, colonIdx);
+        const cursorFp = opts.cursor.slice(colonIdx + 1);
+        rowsResult = await this.client.query({
+          query: `
+            SELECT * FROM certificates
+            WHERE (${whereClause})
+              AND (seenAt < {cursor_ts:Int64} OR (seenAt = {cursor_ts:Int64} AND fingerprint < {cursor_fp:String}))
+            ORDER BY seenAt DESC, fingerprint DESC
+            LIMIT {limit:UInt32}
+          `,
+          query_params: { ...params, cursor_ts: cursorTs, cursor_fp: cursorFp, limit },
+          format: "JSONEachRow",
+          abort_signal: signal,
+        });
+      } else {
+        rowsResult = await this.client.query({
+          query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+          query_params: { ...params, limit, offset },
+          format: "JSONEachRow",
+          abort_signal: signal,
+        });
+      }
       const certRows = await rowsResult.json<CertificateRow>();
 
       const selectElapsed = performance.now() - t1;

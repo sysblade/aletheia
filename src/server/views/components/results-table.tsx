@@ -1,5 +1,10 @@
 import type { Certificate } from "../../../types/certificate.ts";
 
+/** Encodes the last certificate on a page as a pagination cursor "seenAt:fingerprint". */
+function encodeCursor(cert: Certificate): string {
+  return `${cert.seenAt}:${cert.fingerprint}`;
+}
+
 function formatDate(ts: number): string {
   return new Date(ts * 1000).toISOString().slice(0, 16).replace("T", " ");
 }
@@ -110,8 +115,10 @@ export function ResultsTable({ certificates, total, page, totalPages, query, ela
       {totalPages > 1 && (
         <div class="flex justify-center gap-2 mt-6">
           {page > 1 && (
+            // Previous: offset-based (no cursor needed for going back), but passes
+            // knownTotal so the server skips the expensive COUNT query.
             <button
-              hx-get={`/search/results?q=${encodeURIComponent(query)}&page=${page - 1}`}
+              hx-get={`/search/results?q=${encodeURIComponent(query)}&page=${page - 1}&total=${total}`}
               hx-target="#search-results"
               class="px-3 py-1 bg-gray-800 border border-gray-700 rounded hover:bg-gray-700 text-sm"
             >
@@ -122,9 +129,12 @@ export function ResultsTable({ certificates, total, page, totalPages, query, ela
             Page {page} / {totalPages}
             <span class="ml-2 text-gray-500 text-xs">({elapsedMs < 1 ? "<1" : Math.round(elapsedMs)}ms)</span>
           </span>
-          {page < totalPages && (
+          {page < totalPages && certificates.length > 0 && (
+            // Next: cursor-based keyset pagination — O(1) regardless of page depth.
+            // Encodes the last row's (seenAt, fingerprint) so the server can seek
+            // directly without an OFFSET scan.
             <button
-              hx-get={`/search/results?q=${encodeURIComponent(query)}&page=${page + 1}`}
+              hx-get={`/search/results?q=${encodeURIComponent(query)}&page=${page + 1}&total=${total}&cursor=${encodeURIComponent(encodeCursor(certificates[certificates.length - 1]!))}`}
               hx-target="#search-results"
               class="px-3 py-1 bg-gray-800 border border-gray-700 rounded hover:bg-gray-700 text-sm"
             >

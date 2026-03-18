@@ -34,7 +34,24 @@ export async function connectClickHouse(
   await client.ping();
 
   if (!skipTableManagement) {
-    await runClickHouseMigrations(client);
+    // Migrations may include long-running table rebuilds (e.g. adding PARTITION BY),
+    // so use the maintenance timeout rather than the regular request timeout.
+    const migrationClient = createClient({
+      url: cfg.url,
+      username: cfg.username,
+      password: cfg.password,
+      database: cfg.database,
+      application: `${appName}-migrate`,
+      request_timeout: cfg.maintenanceTimeoutMs,
+      clickhouse_settings: {
+        allow_experimental_lightweight_delete: 1,
+      },
+    });
+    try {
+      await runClickHouseMigrations(migrationClient);
+    } finally {
+      await migrationClient.close();
+    }
     log.info("ClickHouse connected, migrations applied");
   } else {
     log.info("ClickHouse connected");
