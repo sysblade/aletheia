@@ -30,15 +30,17 @@ export async function up(client: ClickHouseClient): Promise<void> {
   });
   await client.command({ query: `ALTER TABLE certificates MATERIALIZE INDEX domains_ngram` });
 
+  // issuerOrg and subjectCn are Nullable(String); ngrambf_v1 requires a non-nullable
+  // type so we index the coalesced expression instead.
   await client.command({ query: `ALTER TABLE certificates DROP INDEX IF EXISTS issuer_ngram` });
   await client.command({
-    query: `ALTER TABLE certificates ADD INDEX issuer_ngram issuerOrg TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2`,
+    query: `ALTER TABLE certificates ADD INDEX issuer_ngram (coalesce(issuerOrg, '')) TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2`,
   });
   await client.command({ query: `ALTER TABLE certificates MATERIALIZE INDEX issuer_ngram` });
 
   await client.command({ query: `ALTER TABLE certificates DROP INDEX IF EXISTS subject_ngram` });
   await client.command({
-    query: `ALTER TABLE certificates ADD INDEX subject_ngram subjectCn TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2`,
+    query: `ALTER TABLE certificates ADD INDEX subject_ngram (coalesce(subjectCn, '')) TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2`,
   });
   await client.command({ query: `ALTER TABLE certificates MATERIALIZE INDEX subject_ngram` });
 }
@@ -55,13 +57,13 @@ export async function down(client: ClickHouseClient): Promise<void> {
 
   await client.command({ query: `ALTER TABLE certificates DROP INDEX IF EXISTS issuer_ngram` });
   await client.command({
-    query: `ALTER TABLE certificates ADD INDEX issuer_ngram issuerOrg TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4`,
+    query: `ALTER TABLE certificates ADD INDEX issuer_ngram (coalesce(issuerOrg, '')) TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4`,
   });
   await client.command({ query: `ALTER TABLE certificates MATERIALIZE INDEX issuer_ngram` });
 
   await client.command({ query: `ALTER TABLE certificates DROP INDEX IF EXISTS subject_ngram` });
   await client.command({
-    query: `ALTER TABLE certificates ADD INDEX subject_ngram subjectCn TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4`,
+    query: `ALTER TABLE certificates ADD INDEX subject_ngram (coalesce(subjectCn, '')) TYPE ngrambf_v1(4, 65536, 3, 0) GRANULARITY 4`,
   });
   await client.command({ query: `ALTER TABLE certificates MATERIALIZE INDEX subject_ngram` });
 }

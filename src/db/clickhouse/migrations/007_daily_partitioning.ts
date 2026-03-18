@@ -83,10 +83,10 @@ export async function up(client: ClickHouseClient): Promise<void> {
           certLink     Nullable(String),
           seenAt       Int64,
           createdAt    Int64,
-          INDEX seenAt_minmax  seenAt    TYPE minmax                       GRANULARITY 1,
-          INDEX domains_ngram  domains   TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2,
-          INDEX issuer_ngram   issuerOrg TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2,
-          INDEX subject_ngram  subjectCn TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2
+          INDEX seenAt_minmax  seenAt                      TYPE minmax                       GRANULARITY 1,
+          INDEX domains_ngram  domains                     TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2,
+          INDEX issuer_ngram   (coalesce(issuerOrg, ''))   TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2,
+          INDEX subject_ngram  (coalesce(subjectCn, ''))   TYPE ngrambf_v1(4, 262144, 3, 0) GRANULARITY 2
         ) ENGINE = ReplacingMergeTree(createdAt)
         PARTITION BY toDate(toDateTime(seenAt))
         ORDER BY (seenAt, fingerprint)
