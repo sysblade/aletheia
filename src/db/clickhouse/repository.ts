@@ -299,18 +299,45 @@ export class ClickHouseRepository implements CertificateRepository {
       const t0 = performance.now();
 
       // Page-1 short-circuit: if results fit on a single page we can skip the
-      // streaming COUNT entirely — no progress bar needed for a fast response.
+      // streaming COUNT entirely. Stream with progress so the UI shows activity
+      // while ClickHouse scans, even for fast single-page responses.
       if (page === 1) {
         const earlyResult = await this.client.query({
           query: `SELECT * FROM certificates WHERE ${whereClause} ORDER BY seenAt DESC LIMIT {limit:UInt32}`,
           query_params: { ...params, limit: limit + 1 },
-          format: "JSONEachRow",
+          format: "JSONEachRowWithProgress",
           abort_signal: signal,
         });
-        const earlyRows = await earlyResult.json<CertificateRow>();
+        const earlyStream = earlyResult.stream<CertificateRow>();
+        const earlyReader = earlyStream.getReader();
+        const earlyRows: CertificateRow[] = [];
+        let lastEarlyProgress: SearchProgress | null = null;
+        while (true) {
+          if (signal?.aborted) {
+            await earlyReader.cancel();
+            throw new SearchCancelledError();
+          }
+          const { done, value } = await earlyReader.read();
+          if (done) break;
+          for (const row of value) {
+            const parsed = row.json();
+            if (isProgressRow(parsed)) {
+              const p = parsed.progress;
+              lastEarlyProgress = {
+                readRows: Number(p.read_rows),
+                totalRows: p.total_rows_to_read !== undefined ? Number(p.total_rows_to_read) : undefined,
+                readBytes: Number(p.read_bytes),
+                elapsedMs: Math.round(Number(p.elapsed_ns) / 1_000_000),
+              };
+              onProgress(lastEarlyProgress);
+            } else if (isRow(parsed)) {
+              earlyRows.push(parsed.row as CertificateRow);
+            }
+          }
+        }
         if (earlyRows.length <= limit) {
           const elapsedMs = Math.round(performance.now() - t0);
-          onProgress({ readRows: earlyRows.length, totalRows: earlyRows.length, readBytes: 0, elapsedMs });
+          onProgress({ readRows: earlyRows.length, totalRows: earlyRows.length, readBytes: lastEarlyProgress?.readBytes ?? 0, elapsedMs });
           log.debug("ClickHouse page-1 short-circuit in {elapsed}ms (total={total}) for search {query}", {
             elapsed: elapsedMs,
             total: earlyRows.length,
